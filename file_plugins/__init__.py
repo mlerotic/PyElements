@@ -53,7 +53,6 @@ for m in pkgutil.iter_modules(path=__path__):
         if verbose: print("prerequisites not satisfied:", e)
 
 
-
 # Go through set of plugins and assemble lists of supported file types for each action and data type
 supported_plugins = []
 supported_filters = []
@@ -64,9 +63,8 @@ for P in plugins:
     for ext in P.extension:
         if ext not in supported_filters:
             supported_filters.append(ext) # Fill supported_filters with file extensions
-for data_type in data_types:
-    filter_list = ['Supported Formats ('+' '.join(supported_filters)+')']+filter_list
-    filter_list.append('All files (*.*)')
+filter_list = ['Supported Formats ('+' '.join(supported_filters)+')']+filter_list
+filter_list.append('All files (*.*)')
 
 
 def load(filename, datastore_object=None, plugin=None):

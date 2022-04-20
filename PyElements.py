@@ -62,8 +62,9 @@ class File_GUI():
 
             checklist = self.filter_list[1:-1] #take into account the extra "Supported" and "All" filter entries
 
+
             for i,filt in enumerate(checklist):
-                print(filt, dlg.selectedNameFilter())
+                print(i, filt, dlg.selectedNameFilter())
                 if filt == dlg.selectedNameFilter():
                     chosen_plugin = file_plugins.supported_plugins[i]
                     break
@@ -419,7 +420,12 @@ class DataViewerWidget(QtWidgets.QDockWidget):
 
 
     def GetImage(self):
-        self.image = median_filter(np.rot90(self.data.image_data[78, :, :]), size=3)
+
+        if self.data.data_type == 'XFM':
+            channel = -2
+        else:
+            channel = 78
+        self.image = median_filter(self.data.image_data[channel, :, :].T, size=3)
 
         self.image = (255*(self.image - np.min(self.image))/np.ptp(self.image)).astype(np.uint8)
 
@@ -489,7 +495,7 @@ class ViewerFrame(QtWidgets.QWidget):
         axes = fig.gca()
         fig.patch.set_alpha(1.0)
 
-        im = axes.imshow(np.rot90(dimage), cmap=matplotlib.cm.get_cmap("gray"))
+        im = axes.imshow(dimage.T, cmap=matplotlib.cm.get_cmap("gray"))
 
         axes.axis("off")
         self.ImagePanel.draw()
@@ -593,7 +599,11 @@ class MainFrame(QtWidgets.QMainWindow):
             datawin = DataViewerWidget(self, data)
             self.addDockWidget(Qt.TopDockWidgetArea, datawin)
 
-            self.viewer.ShowImage(data.image_data[78, :, :])
+            if data.data_type == 'XFM':
+                channel = -2
+            else:
+                channel = 78
+            self.viewer.ShowImage(data.image_data[channel, :, :])
 
             QtWidgets.QApplication.restoreOverrideCursor()
 

@@ -1,17 +1,11 @@
 # -*- coding: utf-8 -*-
-
-
-from __future__ import print_function
 import sys, os, h5py
 import numpy as np
-import scipy as sp
-from scipy import stats
-from collections import OrderedDict
-#from PyQt5 import QtGui
+
 
 title = 'LA_hdf5'
 extension = ['*.h5', '*.hdf5']
-type = ['LA']
+type = ['LA-ICP-TOMFS']
 
 def identify(filename):
     try:
@@ -27,7 +21,7 @@ def identify(filename):
 
 def read(FileName, ds_object):
 
-    print('Reading file {0}'.format(FileName))
+    print('Reading file {0} ...'.format(FileName), end=' ')
 
     ds_object.filename = FileName
 
@@ -48,7 +42,7 @@ def read(FileName, ds_object):
     ny = scandata.shape[0]
     nx = int(scandata[0, 4])
     npix = nx*ny
-    print('NX, NY, NPix = ', nx, ny, npix)
+    #print('NX, NY, NPix = ', nx, ny, npix)
 
     n_pts = scandata[:,4]
 
@@ -72,8 +66,6 @@ def read(FileName, ds_object):
 
     n_i_notkeep = ds_object.x_coord[not i_keep].size
 
-    print('n_i_keep', n_i_notkeep)
-
     if n_i_notkeep > 0:
         temp = temp[:, not i_keep]
         ds_object.x_coord = ds_object.x_coord[not i_keep]
@@ -86,25 +78,19 @@ def read(FileName, ds_object):
             I_empty[n_pts[i]:, i] = 1
 
     I_empty = I_empty.flatten('F')
-
     n_pix_unempty = np.count_nonzero(I_empty == 0)
-
-    print('n_pix_unempty', n_pix_unempty)
 
     temp = temp[:, 0:n_pix_unempty]
     ds_object.image_data = np.zeros([npks, npix])
     ds_object.image_data[:, np.where(I_empty == 0)[0]] = temp
-
     ds_object.image_data = np.reshape(ds_object.image_data[0:npks, 0:nx*ny], [npks, nx,ny], order='F')
 
     # PeakTable: label, mass, lower integration limit, upper integration limit
     ds_object.peaks = f_peakdata['PeakTable'][...]
-    print('npeaks:', ds_object.np)
-
 
     F.close()
 
-    print('Done reading data')
+    print('done')
 
 
 
