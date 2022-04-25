@@ -284,8 +284,21 @@ class ToolBarWidget(QtWidgets.QDockWidget):
         frame.setFrameStyle(QtWidgets.QFrame.StyledPanel|QtWidgets.QFrame.Sunken)
         vbox1 = QtWidgets.QVBoxLayout()
 
-        self.rb_data = []
 
+        self.cmaps = ["gray","jet","autumn","bone", "cool","copper", "flag","hot","hsv","pink", "prism","spring",
+                      "summer","winter", "spectral"]
+
+        sizer2 = QtWidgets.QGroupBox('Colormap:')
+        vbox2 = QtWidgets.QVBoxLayout()
+        self.cb_cmap = QtWidgets.QComboBox(self)
+        self.cb_cmap.addItems(self.cmaps)
+        self.cb_cmap.setCurrentIndex(0)
+        self.cb_cmap.currentIndexChanged.connect(self.OnCmapChange)
+        vbox2.addWidget(self.cb_cmap)
+        sizer2.setLayout(vbox2)
+        vbox1.addWidget(sizer2)
+
+        self.rb_data = []
         sizer1 = QtWidgets.QGroupBox('Data')
         self.vbox_data = QtWidgets.QVBoxLayout()
         self.grb_data = QtWidgets.QButtonGroup()
@@ -313,6 +326,12 @@ class ToolBarWidget(QtWidgets.QDockWidget):
         self.parent.i_selected_dataset = [self.grb_data.buttons()[x].isChecked() for x in range(len(self.grb_data.buttons()))].index(True)
         self.parent.ShowImage()
 
+    def OnCmapChange(self):
+
+        old_cmap = self.parent.current_cmap
+        self.parent.current_cmap = self.cb_cmap.currentText()
+        if old_cmap != self.parent.current_cmap:
+            self.parent.ShowImage()
 
 """ ------------------------------------------------------------------------------------------------"""
 class DataViewerWidget(QtWidgets.QDockWidget):
@@ -442,6 +461,8 @@ class ViewerFrame(QtWidgets.QWidget):
 
     def __init__(self, parent):
         super(ViewerFrame, self).__init__(parent)
+        self.parent = parent
+
         vboxtop = QtWidgets.QVBoxLayout(self)
 
         frame = QtWidgets.QFrame()
@@ -479,7 +500,7 @@ class ViewerFrame(QtWidgets.QWidget):
         axes = fig.gca()
         fig.patch.set_alpha(1.0)
 
-        im = axes.imshow(dimage.T, cmap=matplotlib.cm.get_cmap("gray"))
+        im = axes.imshow(dimage.T, cmap=matplotlib.cm.get_cmap(self.parent.current_cmap))
 
         axes.axis("off")
         self.ImagePanel.draw()
@@ -496,6 +517,7 @@ class MainFrame(QtWidgets.QMainWindow):
         self.data_widgets = []
         self.i_selected_dataset = 0
         self.data_channel = []
+        self.current_cmap = 'gray'
 
         self.initUI()
 
