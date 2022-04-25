@@ -86,7 +86,10 @@ def read(FileName, ds_object):
     ds_object.image_data = np.reshape(ds_object.image_data[0:npks, 0:nx*ny], [npks, nx,ny], order='F')
 
     # PeakTable: label, mass, lower integration limit, upper integration limit
-    ds_object.peaks = f_peakdata['PeakTable'][...]
+    ds_object.peaks = []
+    temp_peaks = f_peakdata['PeakTable'][...]
+    for item in temp_peaks:
+        ds_object.peaks.append(item[0].decode('UTF-8'))
 
     F.close()
 

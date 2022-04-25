@@ -46,7 +46,6 @@ class File_GUI():
 
 
     def SelectFile(self):
-        print(file_plugins.supported_plugins)
 
         dlg = QtWidgets.QFileDialog(None)
         dlg.setWindowTitle('Choose File')
@@ -61,7 +60,6 @@ class File_GUI():
             chosen_plugin = None
 
             checklist = self.filter_list[1:-1] #take into account the extra "Supported" and "All" filter entries
-
 
             for i,filt in enumerate(checklist):
                 print(i, filt, dlg.selectedNameFilter())
@@ -261,13 +259,71 @@ File_GUI = File_GUI() #Create instance so that object can remember things (e.g. 
 
 
 """ ------------------------------------------------------------------------------------------------"""
+class ToolBarWidget(QtWidgets.QDockWidget):
+    def __init__(self, parent):
+        super(ToolBarWidget, self).__init__()
+
+        self.parent = parent
+
+        self.initUI()
+
+
+    #----------------------------------------------------------------------
+    def initUI(self):
+
+        self.setStyleSheet("""QToolTip { 
+                                   background-color: black; 
+                                   color: white; 
+                                   border: black solid 1px
+                                   }""")
+
+        self.setFixedSize(120,300)
+        self.setWindowTitle('Toolbar')
+
+        frame = QtWidgets.QFrame()
+        frame.setFrameStyle(QtWidgets.QFrame.StyledPanel|QtWidgets.QFrame.Sunken)
+        vbox1 = QtWidgets.QVBoxLayout()
+
+        self.rb_data = []
+
+        sizer1 = QtWidgets.QGroupBox('Data')
+        self.vbox_data = QtWidgets.QVBoxLayout()
+        self.grb_data = QtWidgets.QButtonGroup()
+        self.grb_data.buttonClicked.connect(self.OnRBData)
+        sizer1.setLayout(self.vbox_data)
+        vbox1.addWidget(sizer1)
+
+        vbox1.addStretch(1)
+        frame.setLayout(vbox1)
+        self.setWidget(frame)
+        self.setFloating(True)
+
+
+    def AddDataRB(self, data_store_type):
+
+        self.rb_data.append(QtWidgets.QRadioButton( data_store_type, self))
+        self.grb_data.addButton(self.rb_data[-1])
+        self.rb_data[-1].setChecked(True)
+
+        self.vbox_data.addWidget(self.rb_data[-1])
+
+
+    def OnRBData(self, button):
+
+        self.parent.i_selected_dataset = [self.grb_data.buttons()[x].isChecked() for x in range(len(self.grb_data.buttons()))].index(True)
+        self.parent.ShowImage()
+
+
+""" ------------------------------------------------------------------------------------------------"""
 class DataViewerWidget(QtWidgets.QDockWidget):
-    def __init__(self, parent, data_store):
+    def __init__(self, parent, data_store, data_index):
         super(DataViewerWidget, self).__init__()
 
         self.parent = parent
         self.data = data_store
         self.data_type = self.data.data_type
+
+        self.data_index = data_index
 
         self.initUI()
 
@@ -288,8 +344,6 @@ class DataViewerWidget(QtWidgets.QDockWidget):
         frame.setFrameStyle(QtWidgets.QFrame.StyledPanel|QtWidgets.QFrame.Sunken)
         vbox1 = QtWidgets.QVBoxLayout()
 
-
-
         hbox1 = QtWidgets.QHBoxLayout()
         hbox1.addStretch(1)
         self.l_data_type = QtWidgets.QLabel(self)
@@ -309,6 +363,7 @@ class DataViewerWidget(QtWidgets.QDockWidget):
         #self.button_popup.setFlat(True)
         self.button_popup.clicked.connect(self.on_context_menu)
         self.button_popup.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
+        self.button_popup.setEnabled(False)
         hbox1.addWidget(self.button_popup, alignment=Qt.AlignRight)
 
         # create context menu
@@ -327,86 +382,15 @@ class DataViewerWidget(QtWidgets.QDockWidget):
         self.popMenu.addAction(action_setupall)
         vbox1.addLayout(hbox1)
 
-
-        # hbox1 = QtGui.QHBoxLayout()
-        #
-        # if not self.showdevice:
-        #     self.position = PVFloatText()
-        # else:
-        #     self.position = PVFloatDeviceText()
-        # font = self.position.font()
-        # font.setPointSize(12)
-        # self.position.setFont(font)
-        # if have_epics:
-        #     self.position.SetPV(self.emotor, 'RBV')
-        # else:
-        #     self.position.setText(rbv)
-        # hbox1.addWidget(self.position, alignment=Qt.AlignCenter)
-        #
-        # if self.customdevice:
-        #     if have_epics:
-        #         if statuspv != '':
-        #             self.l_status = PVStatus()
-        #             self.l_status.SetPV(statuspv, status_update=self.CustomStatusUpdate)
-        #
-        #             value = statuspv.get()
-        #             self.CustomStatusUpdate(value)
-        #         else:
-        #             self.l_status = QtGui.QLabel('')
-        #     else:
-        #         self.l_status = QtGui.QLabel('')
-        #         self.l_status.setPixmap(QtGui.QPixmap(os.path.join('images','led_green.png')))
-        #     self.l_status.setMaximumWidth(18)
-        #     hbox1.addWidget(self.l_status)
-        # vbox1.addLayout(hbox1)
-        #
-        # if not self.showdevice:
-        #     self.ntc_new_position = PVFloatEdit()
-        # else:
-        #     self.ntc_new_position = PVFloatDeviceEdit()
-        # # font = self.position.font()
-        # # font.setPointSize(12)
-        # # self.ntc_new_position.setFont(font)
-        # if have_epics:
-        #     self.ntc_new_position.SetPV(self.emotor, 'VAL')
-        # else:
-        #     self.ntc_new_position.setText(drive)
-        #
-        # vbox1.addWidget(self.ntc_new_position, alignment=Qt.AlignCenter)
-        #
-        # hbox2 = QtGui.QHBoxLayout()
-        # self.button_reverse = QtGui.QPushButton()
-        # self.button_reverse.setIcon(QtGui.QIcon(os.path.join('images','left.png')))
-        # self.button_reverse.setMaximumWidth(30)
-        # self.button_reverse.clicked.connect(self.OnReverse)
-        # hbox2.addWidget(self.button_reverse)
-        #
-        # self.ntc_tweak = QtGui.QLineEdit(self)
-        # self.ntc_tweak.setText(str(tweak_val))
-        # self.ntc_tweak.setValidator(QtGui.QDoubleValidator(-99999999, 99999999, 5, self))
-        # self.ntc_tweak.setAlignment(QtCore.Qt.AlignRight)
-        # #self.ntc_tweak.returnPressed(self.OnTweakVal)
-        # hbox2.addWidget(self.ntc_tweak, alignment=Qt.AlignCenter)
-        #
-        # self.button_forward = QtGui.QPushButton()
-        # self.button_forward.setIcon(QtGui.QIcon(os.path.join('images','right.png')))
-        # self.button_forward.setMaximumWidth(30)
-        # self.button_forward.clicked.connect(self.OnForward)
-        # hbox2.addWidget(self.button_forward)
-        # vbox1.addLayout(hbox2)
-        #
-        # vbox1.addStretch(1)
-        #
-        # self.button_stop = QtGui.QPushButton('Stop')
-        # self.button_stop.clicked.connect(self.OnStop)
-        # if self.disable_stop:
-        #     self.button_stop.setEnabled(False)
-        # vbox1.addWidget(self.button_stop)
-
         self.imgLabel = QtWidgets.QLabel()
         vbox1.addWidget(self.imgLabel)
 
-        vbox1.addStretch(1)
+        self.cb_peaks = QtWidgets.QComboBox(self)
+        self.cb_peaks.addItems(self.data.peaks)
+        self.cb_peaks.setCurrentIndex(self.parent.data_channel[-1])
+        self.cb_peaks.currentIndexChanged.connect(self.OnPeakChange)
+        vbox1.addWidget(self.cb_peaks)
+
         frame.setLayout(vbox1)
         self.setWidget(frame)
         self.setFloating(True)
@@ -420,15 +404,9 @@ class DataViewerWidget(QtWidgets.QDockWidget):
 
 
     def GetImage(self):
-
-        if self.data.data_type == 'XFM':
-            channel = -2
-        else:
-            channel = 78
-        self.image = median_filter(self.data.image_data[channel, :, :].T, size=3)
-
+        self.image = median_filter(self.data.image_data[
+                                   self.parent.data_channel[self.parent.i_selected_dataset], :, :].T, size=3)
         self.image = (255*(self.image - np.min(self.image))/np.ptp(self.image)).astype(np.uint8)
-
         self.DisplayImage()
 
 
@@ -451,6 +429,13 @@ class DataViewerWidget(QtWidgets.QDockWidget):
         self.imgLabel.setAlignment(QtCore.Qt.AlignHCenter
                                  | QtCore.Qt.AlignVCenter)
 
+    def OnPeakChange(self):
+
+        old_data_channel = self.parent.data_channel[self.data_index]
+        self.parent.data_channel[self.data_index] = self.cb_peaks.currentIndex()
+        if old_data_channel != self.parent.data_channel[self.data_index]:
+            self.parent.ShowImage()
+
 
 
 class ViewerFrame(QtWidgets.QWidget):
@@ -467,7 +452,6 @@ class ViewerFrame(QtWidgets.QWidget):
 
         self.ImagePanel = FigureCanvas(self.imgfig)
         self.ImagePanel.setParent(self)
-
 
         fbox.addWidget(self.ImagePanel)
         frame.setLayout(fbox)
@@ -508,6 +492,11 @@ class MainFrame(QtWidgets.QMainWindow):
     def __init__(self):
         super(MainFrame, self).__init__()
 
+        self.data_objects = []
+        self.data_widgets = []
+        self.i_selected_dataset = 0
+        self.data_channel = []
+
         self.initUI()
 
 
@@ -522,7 +511,6 @@ class MainFrame(QtWidgets.QMainWindow):
         self.resize(Winsizex, Winsizey)
         self.setWindowTitle('PyElements v.{0}'.format(version))
 
-        #self.initToolbar()
         self.setDockOptions(QtWidgets.QMainWindow.AnimatedDocks | QtWidgets.QMainWindow.AllowNestedDocks)
 
         self.viewer = ViewerFrame(self)
@@ -530,6 +518,8 @@ class MainFrame(QtWidgets.QMainWindow):
 
         self.initToolbar()
 
+        self.tb_widget = ToolBarWidget(self)
+        self.addDockWidget(Qt.LeftDockWidgetArea, self.tb_widget)
 
         self.show()
 
@@ -550,10 +540,10 @@ class MainFrame(QtWidgets.QMainWindow):
         self.toolbar.addAction(self.actionBrowser)
         self.actionBrowser.triggered.connect(self.OnLoadStack)
 
-        self.actionSettings = QtWidgets.QAction(self)
-        self.actionSettings.setIcon(QtGui.QIcon(os.path.join('resources','settings.png')))
-        self.actionSettings.setToolTip('Settings')
-        self.toolbar.addAction(self.actionSettings)
+        # self.actionSettings = QtWidgets.QAction(self)
+        # self.actionSettings.setIcon(QtGui.QIcon(os.path.join('resources','settings.png')))
+        # self.actionSettings.setToolTip('Settings')
+        # self.toolbar.addAction(self.actionSettings)
         #self.actionSettings.triggered.connect(self.SettingsTB)
 
         spacer = QtWidgets.QWidget()
@@ -592,22 +582,30 @@ class MainFrame(QtWidgets.QMainWindow):
 
             file_plugins.load(filepath, datastore_object=data, plugin=plugin)
 
-            directory = os.path.dirname(str(filepath))
-
-            basename, extension = os.path.splitext(filepath)
-
-            datawin = DataViewerWidget(self, data)
-            self.addDockWidget(Qt.TopDockWidgetArea, datawin)
+            self.data_objects.append(data)
+            self.i_selected_dataset = len(self.data_objects) - 1
 
             if data.data_type == 'XFM':
-                channel = -2
+                self.data_channel.append(len(data.peaks) - 2)
             else:
-                channel = 78
-            self.viewer.ShowImage(data.image_data[channel, :, :])
+                self.data_channel.append(78)
+
+            datawin = DataViewerWidget(self, data, len(self.data_objects) - 1)
+            self.addDockWidget(Qt.TopDockWidgetArea, datawin)
+
+            self.tb_widget.AddDataRB(data.data_type)
+
+            self.data_widgets.append(datawin)
+
+            self.ShowImage()
 
             QtWidgets.QApplication.restoreOverrideCursor()
 
 
+    def ShowImage(self):
+
+        data = self.data_objects[self.i_selected_dataset]
+        self.viewer.ShowImage(data.image_data[self.data_channel[self.i_selected_dataset], :, :])
 
 
 """ ------------------------------------------------------------------------------------------------"""
