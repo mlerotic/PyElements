@@ -333,6 +333,10 @@ class ToolBarWidget(QtWidgets.QDockWidget):
         if old_cmap != self.parent.current_cmap:
             self.parent.ShowImage()
 
+    def close(self):
+        self.hide()
+
+
 """ ------------------------------------------------------------------------------------------------"""
 class DataViewerWidget(QtWidgets.QDockWidget):
     def __init__(self, parent, data_store, data_index):
@@ -538,7 +542,7 @@ class MainFrame(QtWidgets.QMainWindow):
         self.viewer = ViewerFrame(self)
         self.setCentralWidget(self.viewer)
 
-        self.initToolbar()
+        self.initMainTopToolbar()
 
         self.tb_widget = ToolBarWidget(self)
         self.addDockWidget(Qt.LeftDockWidgetArea, self.tb_widget)
@@ -549,39 +553,37 @@ class MainFrame(QtWidgets.QMainWindow):
             self.raise_()
 
 
-    def initToolbar(self):
+    def initMainTopToolbar(self):
 
-        self.toolbar = self.addToolBar('MainToolbar')
-        self.toolbar.setStyleSheet('QToolBar{spacing:3px;}')
-
-
+        self.maintoolbar = self.addToolBar('MainToolbar')
+        self.maintoolbar.setStyleSheet('QToolBar{spacing:3px;}')
 
         self.actionBrowser = QtWidgets.QAction(self)
         self.actionBrowser.setIcon(QtGui.QIcon(os.path.join('resources','openfolder.png')))
-        self.actionBrowser.setToolTip('MDA Browser')
-        self.toolbar.addAction(self.actionBrowser)
+        self.actionBrowser.setToolTip('Load Data')
+        self.maintoolbar.addAction(self.actionBrowser)
         self.actionBrowser.triggered.connect(self.OnLoadStack)
 
-        # self.actionSettings = QtWidgets.QAction(self)
-        # self.actionSettings.setIcon(QtGui.QIcon(os.path.join('resources','settings.png')))
-        # self.actionSettings.setToolTip('Settings')
-        # self.toolbar.addAction(self.actionSettings)
-        #self.actionSettings.triggered.connect(self.SettingsTB)
+        self.actionToolbar = QtWidgets.QAction(self)
+        self.actionToolbar.setIcon(QtGui.QIcon(os.path.join('resources','settings.png')))
+        self.actionToolbar.setToolTip('Toolbar')
+        self.maintoolbar.addAction(self.actionToolbar)
+        self.actionToolbar.triggered.connect(self.OnToolbarTB)
 
         spacer = QtWidgets.QWidget()
         spacer.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
-        self.toolbar.addWidget(spacer)
+        self.maintoolbar.addWidget(spacer)
 
         self.actionHelp = QtWidgets.QAction(self)
         self.actionHelp.setIcon(QtGui.QIcon(os.path.join('resources','help.png')))
         self.actionHelp.setToolTip('Help')
-        self.toolbar.addAction(self.actionHelp)
+        self.maintoolbar.addAction(self.actionHelp)
         #self.actionHelp.triggered.connect(self.HelpTB)
 
         self.actionAbout = QtWidgets.QAction(self)
         self.actionAbout.setIcon(QtGui.QIcon(os.path.join('resources','info.png')))
         self.actionAbout.setToolTip('About')
-        self.toolbar.addAction(self.actionAbout)
+        self.maintoolbar.addAction(self.actionAbout)
         #self.actionAbout.triggered.connect(self.AboutTB)
 
 
@@ -629,6 +631,11 @@ class MainFrame(QtWidgets.QMainWindow):
         data = self.data_objects[self.i_selected_dataset]
         self.viewer.ShowImage(data.image_data[self.data_channel[self.i_selected_dataset], :, :])
 
+
+
+    def OnToolbarTB(self):
+
+        self.tb_widget.show()
 
 """ ------------------------------------------------------------------------------------------------"""
 def main():
