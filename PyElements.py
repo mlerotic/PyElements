@@ -303,6 +303,10 @@ class ToolBarWidget(QtWidgets.QDockWidget):
         sizer2.setLayout(vboxs2)
         vbox1.addWidget(sizer2)
 
+        b_register = QtWidgets.QPushButton('Register Images')
+        b_register.clicked.connect(self.OnRegisterImages)
+        vbox1.addWidget(b_register)
+
         vbox1.addStretch(1)
         frame.setLayout(vbox1)
         self.setWidget(frame)
@@ -340,6 +344,10 @@ class ToolBarWidget(QtWidgets.QDockWidget):
 
         self.parent.i_selected_dataset2 = self.cb_data2.currentIndex() - 1
         self.parent.ShowImage()
+
+
+    def OnRegisterImages(self):
+        self.parent.RegisterImages()
 
 
     def close(self):
@@ -723,6 +731,68 @@ class MainFrame(QtWidgets.QMainWindow):
     def OnToolbarTB(self):
 
         self.tb_widget.show()
+
+    def RegisterImagesManual(self):
+        print('Registering images ... to do')
+
+    # def RegisterImagesCV(self):
+    #     print('Registering images')
+    #
+    #     # Image to be aligned.
+    #     data = self.data_objects[self.i_selected_dataset2]
+    #     image2 = median_filter(data.image_data[self.data_channel[self.i_selected_dataset2], :, :], size=3)
+    #     image2 = ((image2 - image2.min()) * (1/(image2.max() - image2.min()) * 255)).astype('uint8')
+    #
+    #     # Reference image.
+    #     data = self.data_objects[self.i_selected_dataset1]
+    #     image1 = median_filter(data.image_data[self.data_channel[self.i_selected_dataset1], :, :], size=3)
+    #     image1 = ((image1 - image1.min()) * (1/(image1.max() - image1.min()) * 255)).astype('uint8')
+    #
+    #     # Create ORB detector with 5000 features.
+    #     orb_detector = cv2.ORB_create(5000)
+    #
+    #     # Find keypoints and descriptors.
+    #     # The first arg is the image, second arg is the mask
+    #     #  (which is not required in this case).
+    #     kp1, d1 = orb_detector.detectAndCompute(image2, None)
+    #     kp2, d2 = orb_detector.detectAndCompute(image1, None)
+    #
+    #
+    #
+    #     # Match features between the two images.
+    #     # We create a Brute Force matcher with
+    #     # Hamming distance as measurement mode.
+    #     matcher = cv2.BFMatcher(cv2.NORM_HAMMING, crossCheck = True)
+    #
+    #     # Match the two sets of descriptors.
+    #     matches = matcher.match(d1, d2)
+    #     # Sort matches on the basis of their Hamming distance.
+    #     matches = sorted(matches, key = lambda x:x.distance)
+    #
+    #     # Take the top 90 % matches forward.
+    #     matches = matches[:int(len(matches)*0.9)]
+    #     no_of_matches = len(matches)
+    #
+    #     print('no_of_matches', no_of_matches)
+    #
+    #     # Define empty matrices of shape no_of_matches * 2.
+    #     p1 = np.zeros((no_of_matches, 2))
+    #     p2 = np.zeros((no_of_matches, 2))
+    #
+    #     for i in range(len(matches)):
+    #       p1[i, :] = kp1[matches[i].queryIdx].pt
+    #       p2[i, :] = kp2[matches[i].trainIdx].pt
+    #
+    #     # Find the homography matrix.
+    #     homography, mask = cv2.findHomography(p1, p2, cv2.RANSAC)
+    #
+    #     # Use this matrix to transform the
+    #     # colored image wrt the reference image.
+    #     transformed_img = cv2.warpPerspective(image2,
+    #                         homography, (data.ny, data.nx))
+    #
+    #     self.viewer.ShowImage(image1, transformed_img, cmap1=self.data_cmap[self.i_selected_dataset1],
+    #                           cmap2=self.data_cmap[self.i_selected_dataset2])
 
 """ ------------------------------------------------------------------------------------------------"""
 def main():
