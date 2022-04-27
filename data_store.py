@@ -1,4 +1,5 @@
 # -*- coding: utf-8 -*-
+import numpy as np
 
 
 class DataStore:
@@ -13,3 +14,11 @@ class DataStore:
         self.y_coord = None
         self.motor_units = None
         self.filename = ''
+
+
+    def MirrorUD(self):
+        self.image_data = np.flip(self.image_data, 2)
+
+
+    def MirrorLR(self):
+        self.image_data = np.flip(self.image_data, 1)

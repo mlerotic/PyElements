@@ -395,23 +395,16 @@ class DataViewerWidget(QtWidgets.QDockWidget):
         #self.button_popup.setFlat(True)
         self.button_popup.clicked.connect(self.on_context_menu)
         self.button_popup.setContextMenuPolicy(QtCore.Qt.CustomContextMenu)
-        self.button_popup.setEnabled(False)
         hbox1.addWidget(self.button_popup, alignment=Qt.AlignRight)
 
         # create context menu
-        action_info = QtWidgets.QAction('Info...', self)
-        #action_info.setIcon(QtGui.QIcon(os.path.join('images','help.png')))
-        #action_info.triggered.connect(self.OnInfo)
-        action_setup = QtWidgets.QAction('Setup...', self)
-        #action_setup.setIcon(QtGui.QIcon(os.path.join('images','settings.png')))
-        #action_setup.triggered.connect(lambda: self.OnSetup(show_less=True))
-        action_setupall = QtWidgets.QAction('Setup All...', self)
-        #action_setupall.setIcon(QtGui.QIcon(os.path.join('images','settings.png')))
-        #action_setupall.triggered.connect(lambda: self.OnSetup(show_less=False))
+        action_mirrorud = QtWidgets.QAction('Data mirror Up-Down', self)
+        action_mirrorud.triggered.connect(self.OnMirrorUD)
+        action_mirrorlf = QtWidgets.QAction('Data mirror Left-Right', self)
+        action_mirrorlf.triggered.connect(self.OnMirrorLR)
         self.popMenu = QtWidgets.QMenu(self)
-        self.popMenu.addAction(action_info)
-        self.popMenu.addAction(action_setup)
-        self.popMenu.addAction(action_setupall)
+        self.popMenu.addAction(action_mirrorud)
+        self.popMenu.addAction(action_mirrorlf)
         vbox1.addLayout(hbox1)
 
         self.imgLabel = QtWidgets.QLabel()
@@ -485,6 +478,17 @@ class DataViewerWidget(QtWidgets.QDockWidget):
         self.parent.data_cmap[self.data_index] = self.cb_cmap.currentText()
         if old_cmap != self.parent.data_cmap[self.data_index]:
             self.parent.ShowImage()
+
+
+    def OnMirrorUD(self):
+        self.data.MirrorUD()
+        self.parent.ShowImage()
+
+    def OnMirrorLR(self):
+        self.data.MirrorLR()
+        self.parent.ShowImage()
+
+
 
 
     def closeEvent(self, event):
