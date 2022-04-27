@@ -284,27 +284,24 @@ class ToolBarWidget(QtWidgets.QDockWidget):
         frame.setFrameStyle(QtWidgets.QFrame.StyledPanel|QtWidgets.QFrame.Sunken)
         vbox1 = QtWidgets.QVBoxLayout()
 
-
-        self.cmaps = ["gray","jet","autumn","bone", "cool","copper", "flag","hot","hsv","pink", "prism","spring",
-                      "summer","winter", "spectral"]
-
-        sizer2 = QtWidgets.QGroupBox('Colormap:')
-        vbox2 = QtWidgets.QVBoxLayout()
-        self.cb_cmap = QtWidgets.QComboBox(self)
-        self.cb_cmap.addItems(self.cmaps)
-        self.cb_cmap.setCurrentIndex(0)
-        self.cb_cmap.currentIndexChanged.connect(self.OnCmapChange)
-        vbox2.addWidget(self.cb_cmap)
-        sizer2.setLayout(vbox2)
-        vbox1.addWidget(sizer2)
-
-        self.rb_data = []
-        sizer1 = QtWidgets.QGroupBox('Data')
-        self.vbox_data = QtWidgets.QVBoxLayout()
-        self.grb_data = QtWidgets.QButtonGroup()
-        self.grb_data.buttonClicked.connect(self.OnRBData)
-        sizer1.setLayout(self.vbox_data)
+        self.dataset_names = ['None']
+        sizer1 = QtWidgets.QGroupBox('Dataset 1')
+        vboxs1 = QtWidgets.QVBoxLayout()
+        self.cb_data1 = QtWidgets.QComboBox(self)
+        self.cb_data1.addItems(self.dataset_names)
+        self.cb_data1.currentIndexChanged.connect(self.OnData1)
+        vboxs1.addWidget(self.cb_data1)
+        sizer1.setLayout(vboxs1)
         vbox1.addWidget(sizer1)
+
+        sizer2 = QtWidgets.QGroupBox('Dataset 2')
+        vboxs2 = QtWidgets.QVBoxLayout()
+        self.cb_data2 = QtWidgets.QComboBox(self)
+        self.cb_data2.addItems(self.dataset_names)
+        self.cb_data2.currentIndexChanged.connect(self.OnData2)
+        vboxs2.addWidget(self.cb_data2)
+        sizer2.setLayout(vboxs2)
+        vbox1.addWidget(sizer2)
 
         vbox1.addStretch(1)
         frame.setLayout(vbox1)
@@ -312,26 +309,38 @@ class ToolBarWidget(QtWidgets.QDockWidget):
         self.setFloating(True)
 
 
-    def AddDataRB(self, data_store_type):
+    def AddData(self, data_store_type):
 
-        self.rb_data.append(QtWidgets.QRadioButton( data_store_type, self))
-        self.grb_data.addButton(self.rb_data[-1])
-        self.rb_data[-1].setChecked(True)
+        self.dataset_names.append(data_store_type)
+        self.cb_data1.addItem(data_store_type)
 
-        self.vbox_data.addWidget(self.rb_data[-1])
+        self.cb_data2.addItem(data_store_type)
+        if len(self.dataset_names) == 2:
+            self.cb_data1.setCurrentIndex(1)
+        else:
+            self.cb_data2.setCurrentIndex(len(self.dataset_names)-1)
 
 
-    def OnRBData(self, button):
+    def RemoveData(self, data_index):
 
-        self.parent.i_selected_dataset = [self.grb_data.buttons()[x].isChecked() for x in range(len(self.grb_data.buttons()))].index(True)
+        del self.dataset_names[data_index]
+
+        self.cb_data1.removeItem(data_index+1)
+        self.cb_data2.removeItem(data_index+1)
+
+
+
+    def OnData1(self):
+
+        self.parent.i_selected_dataset1 = self.cb_data1.currentIndex() - 1
         self.parent.ShowImage()
 
-    def OnCmapChange(self):
 
-        old_cmap = self.parent.current_cmap
-        self.parent.current_cmap = self.cb_cmap.currentText()
-        if old_cmap != self.parent.current_cmap:
-            self.parent.ShowImage()
+    def OnData2(self):
+
+        self.parent.i_selected_dataset2 = self.cb_data2.currentIndex() - 1
+        self.parent.ShowImage()
+
 
     def close(self):
         self.hide()
@@ -360,7 +369,7 @@ class DataViewerWidget(QtWidgets.QDockWidget):
                                    border: black solid 1px
                                    }""")
 
-        self.setFixedSize(150,220)
+        self.setFixedSize(150, 220)
         self.setWindowTitle(os.path.splitext(os.path.basename(self.data.filename))[0])
 
         frame = QtWidgets.QFrame()
@@ -414,6 +423,17 @@ class DataViewerWidget(QtWidgets.QDockWidget):
         self.cb_peaks.currentIndexChanged.connect(self.OnPeakChange)
         vbox1.addWidget(self.cb_peaks)
 
+        self.cmaps = ["gray","jet","autumn","bone", "cool","copper", "flag","hot","hsv","pink", "prism","spring",
+                      "summer","winter", "spectral"]
+
+        st = QtWidgets.QLabel('Colormap:')
+        vbox1.addWidget(st)
+        self.cb_cmap = QtWidgets.QComboBox(self)
+        self.cb_cmap.addItems(self.cmaps)
+        self.cb_cmap.setCurrentIndex(0)
+        self.cb_cmap.currentIndexChanged.connect(self.OnCmapChange)
+        vbox1.addWidget(self.cb_cmap)
+
         frame.setLayout(vbox1)
         self.setWidget(frame)
         self.setFloating(True)
@@ -428,7 +448,7 @@ class DataViewerWidget(QtWidgets.QDockWidget):
 
     def GetImage(self):
         self.image = median_filter(self.data.image_data[
-                                   self.parent.data_channel[self.parent.i_selected_dataset], :, :].T, size=3)
+                                   self.parent.data_channel[self.data_index], :, :].T, size=3)
         self.image = (255*(self.image - np.min(self.image))/np.ptp(self.image)).astype(np.uint8)
         self.DisplayImage()
 
@@ -459,6 +479,24 @@ class DataViewerWidget(QtWidgets.QDockWidget):
         if old_data_channel != self.parent.data_channel[self.data_index]:
             self.parent.ShowImage()
 
+    def OnCmapChange(self):
+
+        old_cmap = self.parent.data_cmap[self.data_index]
+        self.parent.data_cmap[self.data_index] = self.cb_cmap.currentText()
+        if old_cmap != self.parent.data_cmap[self.data_index]:
+            self.parent.ShowImage()
+
+
+    def closeEvent(self, event):
+
+        returnValue = QtWidgets.QMessageBox.question(self, 'Close dataset', "Are you sure to close the dataset?",
+                                                QtWidgets.QMessageBox.Yes | QtWidgets.QMessageBox.No)
+
+        if returnValue == QtWidgets.QMessageBox.Yes:
+            self.parent.CloseDataset(self.data_index)
+        else:
+            event.ignore()
+
 
 
 class ViewerFrame(QtWidgets.QWidget):
@@ -482,21 +520,17 @@ class ViewerFrame(QtWidgets.QWidget):
         frame.setLayout(fbox)
         vboxtop.addWidget(frame)
 
-        #
-        # self.button1 = QtWidgets.QPushButton("Button 1")
-        # self.layout.addWidget(self.button1)
-        #
-        # self.button2 = QtWidgets.QPushButton("Button 2")
-        # self.layout.addWidget(self.button2)
-
         self.setLayout(vboxtop)
 
 
 #-----------------------------------------------------------------------
-    def ShowImage(self, image):
+    def ShowImage(self, image1, image2, cmap1='gray', cmap2='gray'):
 
-        # despeckle the image
-        dimage = median_filter(image, size=3)
+        if image1 is None and image2 is None:
+            fig = self.imgfig
+            fig.clf()
+            self.ImagePanel.draw()
+            return
 
         fig = self.imgfig
         fig.clf()
@@ -504,7 +538,13 @@ class ViewerFrame(QtWidgets.QWidget):
         axes = fig.gca()
         fig.patch.set_alpha(1.0)
 
-        im = axes.imshow(dimage.T, cmap=matplotlib.cm.get_cmap(self.parent.current_cmap))
+        if image1 is not None:
+            # despeckle the image
+            dimage1 = median_filter(image1, size=3)
+            im = axes.imshow(dimage1.T, cmap=matplotlib.cm.get_cmap(cmap1))
+        if image2 is not None:
+            dimage2 = median_filter(image2, size=3)
+            im = axes.imshow(dimage2.T, cmap=matplotlib.cm.get_cmap(cmap2), alpha=0.5)
 
         axes.axis("off")
         self.ImagePanel.draw()
@@ -519,9 +559,10 @@ class MainFrame(QtWidgets.QMainWindow):
 
         self.data_objects = []
         self.data_widgets = []
-        self.i_selected_dataset = 0
+        self.i_selected_dataset1 = -1
+        self.i_selected_dataset2 = -1
         self.data_channel = []
-        self.current_cmap = 'gray'
+        self.data_cmap = []
 
         self.initUI()
 
@@ -594,7 +635,7 @@ class MainFrame(QtWidgets.QMainWindow):
 
         filepath, plugin = File_GUI.SelectFile()
         if filepath is not None:
-            if plugin is None: # auto-assign appropriate plugin
+            if plugin is None:  # auto-assign appropriate plugin
                 plugin = file_plugins.identify(filepath)
 
             if plugin is None:
@@ -605,31 +646,73 @@ class MainFrame(QtWidgets.QMainWindow):
             data = data_store.DataStore()
 
             file_plugins.load(filepath, datastore_object=data, plugin=plugin)
-
             self.data_objects.append(data)
-            self.i_selected_dataset = len(self.data_objects) - 1
 
             if data.data_type == 'XFM':
                 self.data_channel.append(len(data.peaks) - 2)
             else:
                 self.data_channel.append(78)
 
+            self.data_cmap.append('gray')
+
             datawin = DataViewerWidget(self, data, len(self.data_objects) - 1)
             self.addDockWidget(Qt.TopDockWidgetArea, datawin)
 
-            self.tb_widget.AddDataRB(data.data_type)
-
+            self.tb_widget.AddData(data.data_type)
             self.data_widgets.append(datawin)
+
+            if len(self.data_objects) == 1:
+                self.i_selected_dataset1 = 0
+
+            if len(self.data_objects) > 1:
+                self.i_selected_dataset2 = len(self.data_objects) - 1
 
             self.ShowImage()
 
             QtWidgets.QApplication.restoreOverrideCursor()
 
 
+
+    def CloseDataset(self, dataindex):
+        print('Closing dataset {0}'.format(self.data_objects[dataindex].filename))
+
+        oldindex1 = self.i_selected_dataset1
+        oldindex2 = self.i_selected_dataset2
+
+        self.tb_widget.RemoveData(dataindex)
+
+        if len(self.data_objects) == 1:
+            self.data_objects = []
+            self.data_widgets = []
+            self.i_selected_dataset1 = -1
+            self.i_selected_dataset2 = -1
+            self.data_channel = []
+        else:
+            del self.data_objects[dataindex]
+            del self.data_widgets[dataindex]
+            del self.data_channel[dataindex]
+
+        self.ShowImage()
+
+
     def ShowImage(self):
 
-        data = self.data_objects[self.i_selected_dataset]
-        self.viewer.ShowImage(data.image_data[self.data_channel[self.i_selected_dataset], :, :])
+        image1 = None
+        image2 = None
+        cmap1 = ''
+        cmap2 = ''
+        if self.i_selected_dataset1 >= 0:
+            if len(self.data_objects) > 0:
+                data = self.data_objects[self.i_selected_dataset1]
+                image1 = data.image_data[self.data_channel[self.i_selected_dataset1], :, :]
+                cmap1 = self.data_cmap[self.i_selected_dataset1]
+        if len(self.data_objects) > 0:
+            if self.i_selected_dataset2 >= 0:
+                data = self.data_objects[self.i_selected_dataset2]
+                image2 = data.image_data[self.data_channel[self.i_selected_dataset2], :, :]
+                cmap2 = self.data_cmap[self.i_selected_dataset2]
+
+        self.viewer.ShowImage(image1, image2, cmap1=cmap1, cmap2=cmap2)
 
 
 
