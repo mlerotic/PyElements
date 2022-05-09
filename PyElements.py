@@ -31,7 +31,180 @@ PlotW = PlotH*1.61803
 version = '0.0.1'
 
 
-#-----------------------------------------------------------------------
+class ImageRegistrationDialog(QtWidgets.QDialog):
+
+    def __init__(self, parent, image1, image2):
+        super(ImageRegistrationDialog, self).__init__(parent)
+        self.parent = parent
+
+        self.parent = parent
+        self.image1 = image1
+        self.image2 = image2
+        self.lpoints = []
+        self.rpoints = []
+
+        self.resize(1050, 750)
+        self.setWindowTitle('Image Alignment')
+
+        vboxtop = QtWidgets.QVBoxLayout()
+        st = QtWidgets.QLabel('Select a point on the left image followed by the corresponding point on the right.')
+        font = st.font()
+        font.setBold(True)
+        font.setPointSize(10)
+        st.setFont(font)
+        vboxtop.addWidget(st)
+
+        gridsizertop = QtWidgets.QGridLayout()
+
+        frame = QtWidgets.QFrame()
+        frame.setFrameStyle(QtWidgets.QFrame.StyledPanel|QtWidgets.QFrame.Sunken)
+        fbox = QtWidgets.QHBoxLayout()
+
+        self.limgfig = Figure()
+        self.lImagePanel = FigureCanvas(self.limgfig)
+        self.lImagePanel.setParent(self)
+        self.lImagePanel.mpl_connect('button_press_event', self.OnPointLeftimage)
+        self.lImagePanel.setCursor(Qt.CrossCursor)
+
+        fbox.addWidget(self.lImagePanel)
+        frame.setLayout(fbox)
+        gridsizertop.addWidget(frame, 0, 0)
+
+        frame = QtWidgets.QFrame()
+        frame.setFrameStyle(QtWidgets.QFrame.StyledPanel|QtWidgets.QFrame.Sunken)
+        fbox = QtWidgets.QHBoxLayout()
+
+        self.rimgfig = Figure()
+        self.rImagePanel = FigureCanvas(self.rimgfig)
+        self.rImagePanel.setParent(self)
+        self.rImagePanel.mpl_connect('button_press_event', self.OnPointRightimage)
+        self.rImagePanel.setCursor(Qt.CrossCursor)
+
+        fbox.addWidget(self.rImagePanel)
+        frame.setLayout(fbox)
+        gridsizertop.addWidget(frame, 0, 1)
+        vboxtop.addLayout(gridsizertop)
+
+        self.t_status = QtWidgets.QTextEdit()
+        vboxtop.addWidget(self.t_status)
+
+        hboxb = QtWidgets.QHBoxLayout()
+        hboxb.addStretch(1)
+        button_save = QtWidgets.QPushButton('Apply')
+        button_save.clicked.connect(self.OnApply)
+        hboxb.addWidget(button_save)
+
+        button_clear = QtWidgets.QPushButton('Clear Points')
+        button_clear.clicked.connect(self.OnClear)
+        hboxb.addWidget(button_clear)
+
+        button_cancel = QtWidgets.QPushButton('Cancel')
+        button_cancel.clicked.connect(self.close)
+        hboxb.addWidget(button_cancel)
+        vboxtop.addLayout(hboxb)
+
+        self.setLayout(vboxtop)
+
+        self.ShowImage()
+
+
+    def ShowImage(self):
+
+        image1 = self.image1
+        image2 = self.image2
+
+        if image1 is None or image2 is None:
+            return
+
+        fig = self.limgfig
+        fig.clf()
+        fig.add_axes(((0.0,0.0,1.0,1.0)))
+        self.laxes = fig.gca()
+        fig.patch.set_alpha(1.0)
+        # despeckle the image
+        dimage1 = median_filter(image1, size=3)
+        im = self.laxes.imshow(dimage1.T, cmap=matplotlib.cm.get_cmap('gray'))
+        self.laxes.axis("off")
+        self.lImagePanel.draw()
+
+        fig = self.rimgfig
+        fig.clf()
+        fig.add_axes(((0.0,0.0,1.0,1.0)))
+        self.raxes = fig.gca()
+        fig.patch.set_alpha(1.0)
+        # despeckle the image
+        dimage2 = median_filter(image2, size=3)
+        im = self.raxes.imshow(dimage2.T, cmap=matplotlib.cm.get_cmap('gray'))
+        self.raxes.axis("off")
+        self.rImagePanel.draw()
+
+
+    def OnPointLeftimage(self, evt):
+        x = evt.xdata
+        y = evt.ydata
+
+        if (x == None) or (y == None):
+            return
+
+        x1 = int(np.floor(x))
+        y1 = int(np.floor(y))
+        self.lpoints.append([x1, y1])
+        self.t_status.append('Image L - [{0}, {1}]'.format(x1, y1))
+
+        self.laxes.plot(x1, y1, '.')
+        self.lImagePanel.draw()
+
+    def OnPointRightimage(self, evt):
+        x = evt.xdata
+        y = evt.ydata
+
+        if (x == None) or (y == None):
+            return
+
+        x2 = int(np.floor(x))
+        y2 = int(np.floor(y))
+        self.rpoints.append([x2, y2])
+        self.t_status.append('Image R - [{0}, {1}]'.format(x2, y2))
+
+        self.raxes.plot(x2, y2, '.')
+        self.rImagePanel.draw()
+
+    def OnClear(self):
+        self.lpoints = []
+        self.rpoints = []
+        self.t_status.clear()
+        self.ShowImage()
+
+    def OnApply(self):
+        if len(self.lpoints) < 5 or len(self.rpoints) < 5:
+            QtWidgets.QMessageBox.warning(self, 'Warning', "Please select at least 5 points on the left and the right image.")
+        pts_src = np.array(self.lpoints)
+        pts_dst = np.array(self.rpoints)
+        H, status = cv2.findHomography(pts_src, pts_dst)
+
+        h1, w1 = self.image1.shape[:2]
+        h2, w2 = self.image2.shape[:2]
+        # pts1 = np.float32([[0, 0], [0, h1], [w1, h1], [w1, 0]]).reshape(-1, 1, 2)
+        # pts2 = np.float32([[0, 0], [0, h2], [w2, h2], [w2, 0]]).reshape(-1, 1, 2)
+        # pts2_ = cv2.perspectiveTransform(pts2, H)
+        # pts = np.concatenate((pts1, pts2_), axis=0)
+        # [xmin, ymin] = np.int32(pts.min(axis=0).ravel() - 0.5)
+        # [xmax, ymax] = np.int32(pts.max(axis=0).ravel() + 0.5)
+        # t = [-xmin, -ymin]
+        # Ht = np.array([[1, 0, t[0]], [0, 1, t[1]], [0, 0, 1]])  # translate
+
+        # self.image2 = cv2.warpPerspective(self.image2, Ht.dot(H), (xmax - xmin, ymax - ymin),
+        #                                   flags=cv2.INTER_LINEAR)
+
+        self.image2 = cv2.warpPerspective(self.image2, H, (w1, h1),
+                                          flags=cv2.INTER_LINEAR)
+
+        # print(xmin, xmax, ymin, ymax)
+        print(self.image1.shape, self.image2.shape)
+
+        self.ShowImage()
+
+
 class File_GUI():
     """
     Ask user to choose file and then use an appropriate plugin to read and return a data structure.
@@ -732,8 +905,24 @@ class MainFrame(QtWidgets.QMainWindow):
 
         self.tb_widget.show()
 
-    def RegisterImagesManual(self):
-        print('Registering images ... to do')
+    def RegisterImages(self):
+        image1 = None
+        image2 = None
+        cmap1 = ''
+        cmap2 = ''
+        if self.i_selected_dataset1 >= 0:
+            if len(self.data_objects) > 0:
+                data = self.data_objects[self.i_selected_dataset1]
+                image1 = data.image_data[self.data_channel[self.i_selected_dataset1], :, :]
+        if len(self.data_objects) > 0:
+            if self.i_selected_dataset2 >= 0:
+                data = self.data_objects[self.i_selected_dataset2]
+                image2 = data.image_data[self.data_channel[self.i_selected_dataset2], :, :]
+
+        imgregwin = ImageRegistrationDialog(self, image1, image2)
+        imgregwin.show()
+
+
 
     # def RegisterImagesCV(self):
     #     print('Registering images')
