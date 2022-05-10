@@ -47,7 +47,7 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
         self.setWindowTitle('Image Alignment')
 
         vboxtop = QtWidgets.QVBoxLayout()
-        st = QtWidgets.QLabel('Select a point on the left image followed by the corresponding point on the right.')
+        st = QtWidgets.QLabel('Select 3 points on the left image and 3 corresponding points on the right.')
         font = st.font()
         font.setBold(True)
         font.setPointSize(10)
@@ -148,7 +148,7 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
 
         x1 = int(np.floor(x))
         y1 = int(np.floor(y))
-        self.lpoints.append([x1, y1])
+        self.lpoints.append([y1, x1])
         self.t_status.append('Image L - [{0}, {1}]'.format(x1, y1))
 
         self.laxes.plot(x1, y1, '.')
@@ -163,7 +163,7 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
 
         x2 = int(np.floor(x))
         y2 = int(np.floor(y))
-        self.rpoints.append([x2, y2])
+        self.rpoints.append([y2, x2])
         self.t_status.append('Image R - [{0}, {1}]'.format(x2, y2))
 
         self.raxes.plot(x2, y2, '.')
@@ -176,31 +176,22 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
         self.ShowImage()
 
     def OnApply(self):
-        if len(self.lpoints) < 5 or len(self.rpoints) < 5:
-            QtWidgets.QMessageBox.warning(self, 'Warning', "Please select at least 5 points on the left and the right image.")
-        pts_src = np.array(self.lpoints)
-        pts_dst = np.array(self.rpoints)
-        H, status = cv2.findHomography(pts_src, pts_dst)
-
+        if len(self.lpoints) != 3 or len(self.rpoints) != 3:
+            QtWidgets.QMessageBox.warning(self, 'Warning', "Please select exactly 3 points on the left and the right image.")
+            return 
+        transform = 'affine'
+        pts1 = np.float32(self.lpoints)
+        pts2 = np.float32(self.rpoints)
         h1, w1 = self.image1.shape[:2]
         h2, w2 = self.image2.shape[:2]
-        # pts1 = np.float32([[0, 0], [0, h1], [w1, h1], [w1, 0]]).reshape(-1, 1, 2)
-        # pts2 = np.float32([[0, 0], [0, h2], [w2, h2], [w2, 0]]).reshape(-1, 1, 2)
-        # pts2_ = cv2.perspectiveTransform(pts2, H)
-        # pts = np.concatenate((pts1, pts2_), axis=0)
-        # [xmin, ymin] = np.int32(pts.min(axis=0).ravel() - 0.5)
-        # [xmax, ymax] = np.int32(pts.max(axis=0).ravel() + 0.5)
-        # t = [-xmin, -ymin]
-        # Ht = np.array([[1, 0, t[0]], [0, 1, t[1]], [0, 0, 1]])  # translate
 
-        # self.image2 = cv2.warpPerspective(self.image2, Ht.dot(H), (xmax - xmin, ymax - ymin),
-        #                                   flags=cv2.INTER_LINEAR)
-
-        self.image2 = cv2.warpPerspective(self.image2, H, (w1, h1),
-                                          flags=cv2.INTER_LINEAR)
-
-        # print(xmin, xmax, ymin, ymax)
-        print(self.image1.shape, self.image2.shape)
+        if transform == 'affine':
+            M = cv2.getAffineTransform(pts2, pts1)
+            self.image2 = cv2.warpAffine(self.image2, M, (w1, h1))
+        else:
+            H, status = cv2.findHomography(pts2, pts1)
+            self.image2 = cv2.warpPerspective(self.image2, H, (w1, h1),
+                                              flags=cv2.INTER_LINEAR)
 
         self.ShowImage()
 
