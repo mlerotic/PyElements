@@ -101,17 +101,19 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
         button_cancel = QtWidgets.QPushButton('Cancel')
         button_cancel.clicked.connect(self.close)
         hboxb.addWidget(button_cancel)
+
+        button_save = QtWidgets.QPushButton('Save')
+        button_save.clicked.connect(self.OnSave)
+        hboxb.addWidget(button_save)
+
         vboxtop.addLayout(hboxb)
 
         self.setLayout(vboxtop)
 
-        self.ShowImage()
+        self.ShowImage(self.image1, self.image2)
 
 
-    def ShowImage(self):
-
-        image1 = self.image1
-        image2 = self.image2
+    def ShowImage(self, image1, image2):
 
         if image1 is None or image2 is None:
             return
@@ -173,12 +175,12 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
         self.lpoints = []
         self.rpoints = []
         self.t_status.clear()
-        self.ShowImage()
+        self.ShowImage(self.image1, self.image2)
 
     def OnApply(self):
         if len(self.lpoints) != 3 or len(self.rpoints) != 3:
             QtWidgets.QMessageBox.warning(self, 'Warning', "Please select exactly 3 points on the left and the right image.")
-            return 
+            return
         transform = 'affine'
         pts1 = np.float32(self.lpoints)
         pts2 = np.float32(self.rpoints)
@@ -186,14 +188,19 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
         h2, w2 = self.image2.shape[:2]
 
         if transform == 'affine':
-            M = cv2.getAffineTransform(pts2, pts1)
-            self.image2 = cv2.warpAffine(self.image2, M, (w1, h1))
+            H = cv2.getAffineTransform(pts2, pts1)
+            al_image2 = cv2.warpAffine(self.image2, H, (w1, h1))
         else:
             H, status = cv2.findHomography(pts2, pts1)
-            self.image2 = cv2.warpPerspective(self.image2, H, (w1, h1),
+            al_image2 = cv2.warpPerspective(self.image2, H, (w1, h1),
                                               flags=cv2.INTER_LINEAR)
 
-        self.ShowImage()
+        self.data_transform = H
+        self.ShowImage(self.image1, al_image2)
+
+    def OnSave(self):
+        self.parent.data_transform = self.data_transform
+        self.close()
 
 
 class File_GUI():
@@ -740,6 +747,8 @@ class MainFrame(QtWidgets.QMainWindow):
         self.data_channel = []
         self.data_cmap = []
 
+        self.data_transform = None
+
         self.initUI()
 
 
@@ -887,6 +896,9 @@ class MainFrame(QtWidgets.QMainWindow):
                 data = self.data_objects[self.i_selected_dataset2]
                 image2 = data.image_data[self.data_channel[self.i_selected_dataset2], :, :]
                 cmap2 = self.data_cmap[self.i_selected_dataset2]
+                if self.data_transform is not None:
+                    h1, w1 = image1.shape[:2]
+                    image2 = cv2.warpAffine(image2, self.data_transform, (w1, h1))
 
         self.viewer.ShowImage(image1, image2, cmap1=cmap1, cmap2=cmap2)
 
