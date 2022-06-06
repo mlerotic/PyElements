@@ -17,7 +17,8 @@ matplotlib.rcParams['svg.fonttype'] = 'none'
 from matplotlib import cm
 import cv2
 import numpy as np
-from scipy.ndimage import median_filter
+import scipy as sp
+from scipy.ndimage import median_filter, uniform_filter
 import file_plugins
 import data_store
 
@@ -29,6 +30,96 @@ PlotH = 4.0
 PlotW = PlotH*1.61803
 
 version = '0.0.1'
+
+
+# -----------------------------------------------------------------------------
+# Despike image using Enhanced Lee Filter
+def despike(image, leefilt_percent=50.0):
+    fimg = lee_filter(image)
+
+    leefilt_max = np.amax(fimg)
+    threshold = (1. + 0.01 * leefilt_percent) * leefilt_max
+
+    datadim = np.int32(image.shape)
+
+    ncols = datadim[0].copy()
+    nrows = datadim[1].copy()
+
+    spikes = np.where(image > threshold)
+    n_spikes = fimg[spikes].shape[0]
+
+    result_img = image.copy()
+
+    if n_spikes > 0:
+
+        xsp = spikes[0]
+        ysp = spikes[1]
+        for i in range(n_spikes):
+            ix = xsp[i]
+            iy = ysp[i]
+            if ix == 0:
+                ix1 = 1
+                ix2 = 2
+            elif ix == (ncols - 1):
+                ix1 = ncols - 2
+                ix2 = ncols - 3
+            else:
+                ix1 = ix - 1
+                ix2 = ix + 1
+
+            if iy == 0:
+                iy1 = 1
+                iy2 = 2
+            elif iy == (nrows - 1):
+                iy1 = nrows - 2
+                iy2 = nrows - 3
+            else:
+                iy1 = iy - 1
+                iy2 = iy + 1
+
+            result_img[ix, iy] = 0.25 * (image[ix1, iy] + image[ix2, iy] +
+                                         image[ix, iy1] + image[ix, iy2])
+
+    return result_img
+
+
+# -----------------------------------------------------------------------------
+# Lee filter
+def lee_filter(image):
+    nbox = 5  # The size of the filter box is 2N+1.  The default value is 5.
+    sig = 5.0  # Estimate of the standard deviation.  The default is 5.
+
+    delta = int((nbox - 1) / 2)  # width of window
+
+    datadim = np.int32(image.shape)
+
+    n_cols = datadim[0].copy()
+    n_rows = datadim[1].copy()
+
+    Imean = np.zeros((n_cols, n_rows))
+    uniform_filter(image, size=nbox, output=Imean)
+
+    Imean2 = Imean ** 2
+
+    # variance
+    z = np.empty((n_cols, n_rows))
+
+    for l in range(delta, n_cols - delta):
+        for s in range(delta, n_rows - delta):
+            z[l, s] = np.sum((image[l - delta:l + delta, s - delta:s + delta] - Imean[l, s]) ** 2)
+
+    z = z / float(nbox ** 2 - 1.0)
+
+    z = (z + Imean2) / float(1.0 + sig ** 2) - Imean2
+
+    ind = np.where(z < 0)
+    n_ind = z[ind].shape[0]
+    if n_ind > 0:
+        z[ind] = 0
+
+    lf_image = Imean + (image - Imean) * (z / (Imean2 * sig ** 2 + z))
+
+    return lf_image
 
 
 class ImageRegistrationDialog(QtWidgets.QDialog):
@@ -124,21 +215,22 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
         self.laxes = fig.gca()
         fig.patch.set_alpha(1.0)
         # despeckle the image
-        dimage1 = median_filter(image1, size=3)
+        dimage1 = despike(image1)
         im = self.laxes.imshow(dimage1.T, cmap=matplotlib.cm.get_cmap('gray'))
         self.laxes.axis("off")
         self.lImagePanel.draw()
 
-        fig = self.rimgfig
-        fig.clf()
-        fig.add_axes(((0.0,0.0,1.0,1.0)))
-        self.raxes = fig.gca()
-        fig.patch.set_alpha(1.0)
-        # despeckle the image
-        dimage2 = median_filter(image2, size=3)
-        im = self.raxes.imshow(dimage2.T, cmap=matplotlib.cm.get_cmap('gray'))
-        self.raxes.axis("off")
-        self.rImagePanel.draw()
+        if image2 is not None:
+            fig = self.rimgfig
+            fig.clf()
+            fig.add_axes(((0.0,0.0,1.0,1.0)))
+            self.raxes = fig.gca()
+            fig.patch.set_alpha(1.0)
+            # despeckle the image
+            dimage2 = despike(image2)
+            im = self.raxes.imshow(dimage2.T, cmap=matplotlib.cm.get_cmap('gray'))
+            self.raxes.axis("off")
+            self.rImagePanel.draw()
 
 
     def OnPointLeftimage(self, evt):
@@ -548,7 +640,7 @@ class DataViewerWidget(QtWidgets.QDockWidget):
                                    border: black solid 1px
                                    }""")
 
-        self.setFixedSize(150, 220)
+        self.setFixedSize(160, 250)
         self.setWindowTitle(os.path.splitext(os.path.basename(self.data.filename))[0])
 
         frame = QtWidgets.QFrame()
@@ -596,7 +688,7 @@ class DataViewerWidget(QtWidgets.QDockWidget):
         vbox1.addWidget(self.cb_peaks)
 
         self.cmaps = ["gray","jet","autumn","bone", "cool","copper", "flag","hot","hsv","pink", "prism","spring",
-                      "summer","winter", "spectral"]
+                      "summer","winter"]
 
         st = QtWidgets.QLabel('Colormap:')
         vbox1.addWidget(st)
@@ -605,6 +697,24 @@ class DataViewerWidget(QtWidgets.QDockWidget):
         self.cb_cmap.setCurrentIndex(0)
         self.cb_cmap.currentIndexChanged.connect(self.OnCmapChange)
         vbox1.addWidget(self.cb_cmap)
+
+        self.cb_despike = QtWidgets.QCheckBox('Despike', self)
+        if self.data.despike == 1:
+            self.cb_despike.setChecked(False)
+        self.cb_despike.stateChanged.connect(self.OnDespike)
+        vbox1.addWidget(self.cb_despike)
+
+        hbox2 = QtWidgets.QHBoxLayout()
+        self.tc_thrmax = QtWidgets.QLabel(self)
+        self.tc_thrmax.setText('Threshold Max:')
+        hbox2.addWidget(self.tc_thrmax)
+        self.slider_thrmax = QtWidgets.QSlider(QtCore.Qt.Horizontal, self)
+        self.slider_thrmax.setRange(1, 100)
+        self.slider_thrmax.setValue(100)
+        self.slider_thrmax.setFocusPolicy(QtCore.Qt.StrongFocus)
+        self.slider_thrmax.valueChanged[int].connect(self.OnThreshold)
+        hbox2.addWidget(self.slider_thrmax)
+        vbox1.addLayout(hbox2)
 
         frame.setLayout(vbox1)
         self.setWidget(frame)
@@ -620,7 +730,7 @@ class DataViewerWidget(QtWidgets.QDockWidget):
 
     def GetImage(self):
         self.image = median_filter(self.data.image_data[
-                                   self.parent.data_channel[self.data_index], :, :].T, size=3)
+                                   self.parent.data_channel[self.data_index], :, :].T, size=5)
         self.image = (255*(self.image - np.min(self.image))/np.ptp(self.image)).astype(np.uint8)
         self.DisplayImage()
 
@@ -667,8 +777,16 @@ class DataViewerWidget(QtWidgets.QDockWidget):
         self.data.MirrorLR()
         self.parent.ShowImage()
 
+    def OnDespike(self):
+        if self.cb_despike.isChecked():
+            self.data.despike = 1
+        else:
+            self.data.despike = 0
+        self.parent.ShowImage()
 
-
+    def OnThreshold(self, value):
+        self.data.threshold = value
+        self.parent.ShowImage()
 
     def closeEvent(self, event):
 
@@ -702,6 +820,8 @@ class ViewerFrame(QtWidgets.QWidget):
         fbox.addWidget(self.ImagePanel)
         frame.setLayout(fbox)
         vboxtop.addWidget(frame)
+        toolbar = NavigationToolbar(self.ImagePanel, self)
+        vboxtop.addWidget(toolbar)
 
         self.setLayout(vboxtop)
 
@@ -721,13 +841,12 @@ class ViewerFrame(QtWidgets.QWidget):
         axes = fig.gca()
         fig.patch.set_alpha(1.0)
 
+        alpha = 1
         if image1 is not None:
-            # despeckle the image
-            dimage1 = median_filter(image1, size=3)
-            im = axes.imshow(dimage1.T, cmap=matplotlib.cm.get_cmap(cmap1))
+            im = axes.imshow(image1.T, cmap=matplotlib.cm.get_cmap(cmap1))
+            alpha = 0.5
         if image2 is not None:
-            dimage2 = median_filter(image2, size=3)
-            im = axes.imshow(dimage2.T, cmap=matplotlib.cm.get_cmap(cmap2), alpha=0.5)
+            im = axes.imshow(image2.T, cmap=matplotlib.cm.get_cmap(cmap2), alpha=alpha)
 
         axes.axis("off")
         self.ImagePanel.draw()
@@ -746,6 +865,8 @@ class MainFrame(QtWidgets.QMainWindow):
         self.i_selected_dataset2 = -1
         self.data_channel = []
         self.data_cmap = []
+        self.image1 = None
+        self.image2 = None
 
         self.data_transform = None
 
@@ -796,21 +917,21 @@ class MainFrame(QtWidgets.QMainWindow):
         self.maintoolbar.addAction(self.actionToolbar)
         self.actionToolbar.triggered.connect(self.OnToolbarTB)
 
-        spacer = QtWidgets.QWidget()
-        spacer.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
-        self.maintoolbar.addWidget(spacer)
-
-        self.actionHelp = QtWidgets.QAction(self)
-        self.actionHelp.setIcon(QtGui.QIcon(os.path.join('resources','help.png')))
-        self.actionHelp.setToolTip('Help')
-        self.maintoolbar.addAction(self.actionHelp)
-        #self.actionHelp.triggered.connect(self.HelpTB)
-
-        self.actionAbout = QtWidgets.QAction(self)
-        self.actionAbout.setIcon(QtGui.QIcon(os.path.join('resources','info.png')))
-        self.actionAbout.setToolTip('About')
-        self.maintoolbar.addAction(self.actionAbout)
-        #self.actionAbout.triggered.connect(self.AboutTB)
+        # spacer = QtWidgets.QWidget()
+        # spacer.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
+        # self.maintoolbar.addWidget(spacer)
+        #
+        # self.actionHelp = QtWidgets.QAction(self)
+        # self.actionHelp.setIcon(QtGui.QIcon(os.path.join('resources','help.png')))
+        # self.actionHelp.setToolTip('Help')
+        # self.maintoolbar.addAction(self.actionHelp)
+        # #self.actionHelp.triggered.connect(self.HelpTB)
+        #
+        # self.actionAbout = QtWidgets.QAction(self)
+        # self.actionAbout.setIcon(QtGui.QIcon(os.path.join('resources','info.png')))
+        # self.actionAbout.setToolTip('About')
+        # self.maintoolbar.addAction(self.actionAbout)
+        # #self.actionAbout.triggered.connect(self.AboutTB)
 
 
     def OnLoadStack(self):
@@ -882,6 +1003,7 @@ class MainFrame(QtWidgets.QMainWindow):
 
     def ShowImage(self):
 
+        QtWidgets.QApplication.setOverrideCursor(QtGui.QCursor(Qt.WaitCursor))
         image1 = None
         image2 = None
         cmap1 = ''
@@ -889,18 +1011,31 @@ class MainFrame(QtWidgets.QMainWindow):
         if self.i_selected_dataset1 >= 0:
             if len(self.data_objects) > 0:
                 data = self.data_objects[self.i_selected_dataset1]
-                image1 = data.image_data[self.data_channel[self.i_selected_dataset1], :, :]
+                image1 = data.image_data[self.data_channel[self.i_selected_dataset1], :, :].copy()
                 cmap1 = self.data_cmap[self.i_selected_dataset1]
+                if data.despike == 1:
+                    image1 = despike(image1)
+                if data.threshold != 100:
+                    thrnum = np.amax(image1)*data.threshold/100.
+                    image1[image1 > thrnum] = thrnum
+
         if len(self.data_objects) > 0:
             if self.i_selected_dataset2 >= 0:
                 data = self.data_objects[self.i_selected_dataset2]
-                image2 = data.image_data[self.data_channel[self.i_selected_dataset2], :, :]
+                image2 = data.image_data[self.data_channel[self.i_selected_dataset2], :, :].copy()
                 cmap2 = self.data_cmap[self.i_selected_dataset2]
+                if data.despike == 1:
+                    image2 = despike(image2)
+                if data.threshold != 100:
+                    thrnum = np.amax(image2)*data.threshold/100.
+                    image2[image2 > thrnum] = thrnum
                 if self.data_transform is not None:
                     h1, w1 = image1.shape[:2]
                     image2 = cv2.warpAffine(image2, self.data_transform, (w1, h1))
-
+        self.image1 = image1
+        self.image2 = image2
         self.viewer.ShowImage(image1, image2, cmap1=cmap1, cmap2=cmap2)
+        QtWidgets.QApplication.restoreOverrideCursor()
 
 
 
@@ -913,16 +1048,8 @@ class MainFrame(QtWidgets.QMainWindow):
         image2 = None
         cmap1 = ''
         cmap2 = ''
-        if self.i_selected_dataset1 >= 0:
-            if len(self.data_objects) > 0:
-                data = self.data_objects[self.i_selected_dataset1]
-                image1 = data.image_data[self.data_channel[self.i_selected_dataset1], :, :]
-        if len(self.data_objects) > 0:
-            if self.i_selected_dataset2 >= 0:
-                data = self.data_objects[self.i_selected_dataset2]
-                image2 = data.image_data[self.data_channel[self.i_selected_dataset2], :, :]
 
-        imgregwin = ImageRegistrationDialog(self, image1, image2)
+        imgregwin = ImageRegistrationDialog(self, self.image1, self.image2)
         imgregwin.show()
 
 

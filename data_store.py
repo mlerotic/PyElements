@@ -14,6 +14,8 @@ class DataStore:
         self.y_coord = None
         self.motor_units = None
         self.filename = ''
+        self.despike = 0
+        self.threshold = 100
 
 
     def MirrorUD(self):
