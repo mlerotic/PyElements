@@ -133,17 +133,29 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
         self.image2 = image2
         self.lpoints = []
         self.rpoints = []
+        self.transform = 'affine'
 
         self.resize(1050, 750)
         self.setWindowTitle('Image Alignment')
 
         vboxtop = QtWidgets.QVBoxLayout()
+        st = QtWidgets.QLabel('Select alignment method:')
+        self.rb_affine = QtWidgets.QRadioButton('Affine', self)
+        self.rb_hom = QtWidgets.QRadioButton('Homography',self)
+        self.rb_affine.setChecked(True)
+        self.rb_affine.toggled.connect(self.OnMethod)
+        vboxtop.addWidget(st)
+        vboxtop.addWidget(self.rb_affine)
+        vboxtop.addWidget(self.rb_hom)
+        vboxtop.addSpacing(20)
+
         st = QtWidgets.QLabel('Select 3 points on the left image and 3 corresponding points on the right.')
         font = st.font()
         font.setBold(True)
         font.setPointSize(10)
         st.setFont(font)
         vboxtop.addWidget(st)
+        self.instruction = st
 
         gridsizertop = QtWidgets.QGridLayout()
 
@@ -270,16 +282,25 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
         self.ShowImage(self.image1, self.image2)
 
     def OnApply(self):
-        if len(self.lpoints) != 3 or len(self.rpoints) != 3:
-            QtWidgets.QMessageBox.warning(self, 'Warning', "Please select exactly 3 points on the left and the right image.")
-            return
-        transform = 'affine'
+        if self.transform == 'affine':
+            npts = 3
+            if len(self.lpoints) != npts or len(self.rpoints) != npts:
+                QtWidgets.QMessageBox.warning(self, 'Warning', "Please select exactly {0} points on the left "
+                                                               "and the right image.".format(npts))
+                return
+        else:
+            npts = 5
+            if len(self.lpoints) < npts or len(self.rpoints) < npts:
+                QtWidgets.QMessageBox.warning(self, 'Warning', "Please select {0} points on the left "
+                                                               "and the right image.".format(npts))
+                return
+        QtWidgets.QApplication.setOverrideCursor(QtGui.QCursor(Qt.WaitCursor))
         pts1 = np.float32(self.lpoints)
         pts2 = np.float32(self.rpoints)
         h1, w1 = self.image1.shape[:2]
         h2, w2 = self.image2.shape[:2]
 
-        if transform == 'affine':
+        if self.transform == 'affine':
             H = cv2.getAffineTransform(pts2, pts1)
             al_image2 = cv2.warpAffine(self.image2, H, (w1, h1))
         else:
@@ -289,10 +310,26 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
 
         self.data_transform = H
         self.ShowImage(self.image1, al_image2)
+        QtWidgets.QApplication.restoreOverrideCursor()
 
     def OnSave(self):
         self.parent.data_transform = self.data_transform
+        self.parent.transform = self.transform
+        self.parent.ShowImage()
         self.close()
+
+
+    def OnMethod(self, enabled):
+        state = enabled
+
+        if state:
+            self.transform = 'affine'
+            self.instruction.setText('Select 3 points on the left image and 3 corresponding points on the right.')
+        else:
+            self.transform = 'homography'
+            self.instruction.setText('Select at least 5 points on the left image and 5 corresponding points on the right.')
+
+        self.OnClear()
 
 
 class File_GUI():
@@ -865,9 +902,8 @@ class MainFrame(QtWidgets.QMainWindow):
         self.i_selected_dataset2 = -1
         self.data_channel = []
         self.data_cmap = []
-        self.image1 = None
-        self.image2 = None
 
+        self.transform = None
         self.data_transform = None
 
         self.initUI()
@@ -1000,6 +1036,15 @@ class MainFrame(QtWidgets.QMainWindow):
 
         self.ShowImage()
 
+    def GetImage(self, data, data_channel):
+        img = None
+        img = data.image_data[data_channel, :, :].copy()
+        if data.despike == 1:
+            img = despike(img)
+        if data.threshold != 100:
+            thrnum = np.amax(img)*data.threshold/100.
+            img[img > thrnum] = thrnum
+        return img
 
     def ShowImage(self):
 
@@ -1011,29 +1056,21 @@ class MainFrame(QtWidgets.QMainWindow):
         if self.i_selected_dataset1 >= 0:
             if len(self.data_objects) > 0:
                 data = self.data_objects[self.i_selected_dataset1]
-                image1 = data.image_data[self.data_channel[self.i_selected_dataset1], :, :].copy()
+                image1 = self.GetImage(data, self.data_channel[self.i_selected_dataset1])
                 cmap1 = self.data_cmap[self.i_selected_dataset1]
-                if data.despike == 1:
-                    image1 = despike(image1)
-                if data.threshold != 100:
-                    thrnum = np.amax(image1)*data.threshold/100.
-                    image1[image1 > thrnum] = thrnum
 
         if len(self.data_objects) > 0:
-            if self.i_selected_dataset2 >= 0:
+         if self.i_selected_dataset2 >= 0:
                 data = self.data_objects[self.i_selected_dataset2]
-                image2 = data.image_data[self.data_channel[self.i_selected_dataset2], :, :].copy()
+                image2 = self.GetImage(data, self.data_channel[self.i_selected_dataset2])
                 cmap2 = self.data_cmap[self.i_selected_dataset2]
-                if data.despike == 1:
-                    image2 = despike(image2)
-                if data.threshold != 100:
-                    thrnum = np.amax(image2)*data.threshold/100.
-                    image2[image2 > thrnum] = thrnum
                 if self.data_transform is not None:
                     h1, w1 = image1.shape[:2]
-                    image2 = cv2.warpAffine(image2, self.data_transform, (w1, h1))
-        self.image1 = image1
-        self.image2 = image2
+                    if self.transform == 'affine':
+                        image2 = cv2.warpAffine(image2, self.data_transform, (w1, h1))
+                    else:
+                        image2 = cv2.warpPerspective(image2, self.data_transform, (w1, h1),
+                                                        flags=cv2.INTER_LINEAR)
         self.viewer.ShowImage(image1, image2, cmap1=cmap1, cmap2=cmap2)
         QtWidgets.QApplication.restoreOverrideCursor()
 
@@ -1046,10 +1083,14 @@ class MainFrame(QtWidgets.QMainWindow):
     def RegisterImages(self):
         image1 = None
         image2 = None
-        cmap1 = ''
-        cmap2 = ''
-
-        imgregwin = ImageRegistrationDialog(self, self.image1, self.image2)
+        if len(self.data_objects) > 0:
+            if self.i_selected_dataset1 >= 0:
+                data = self.data_objects[self.i_selected_dataset1]
+                image1 = self.GetImage(data, self.data_channel[self.i_selected_dataset1])
+            if self.i_selected_dataset2 >= 0:
+                data = self.data_objects[self.i_selected_dataset2]
+                image2 = self.GetImage(data, self.data_channel[self.i_selected_dataset2])
+        imgregwin = ImageRegistrationDialog(self, image1, image2)
         imgregwin.show()
 
 
