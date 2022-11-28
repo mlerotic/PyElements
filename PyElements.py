@@ -594,6 +594,7 @@ class ToolBarWidget(QtWidgets.QDockWidget):
         sizer1.setLayout(vboxs1)
         vbox1.addWidget(sizer1)
 
+
         sizer2 = QtWidgets.QGroupBox('Dataset 2')
         vboxs2 = QtWidgets.QVBoxLayout()
         self.cb_data2 = QtWidgets.QComboBox(self)
@@ -606,6 +607,12 @@ class ToolBarWidget(QtWidgets.QDockWidget):
         b_register = QtWidgets.QPushButton('Register Images')
         b_register.clicked.connect(self.OnRegisterImages)
         vbox1.addWidget(b_register)
+
+        vbox1.addSpacing(15)
+        self.cb_scalebar = QtWidgets.QCheckBox('Show Scalebar', self)
+        self.cb_scalebar.setChecked(self.parent.show_scale_bar)
+        self.cb_scalebar.stateChanged.connect(self.OnShowScalebar)
+        vbox1.addWidget(self.cb_scalebar)
 
         vbox1.addStretch(1)
         frame.setLayout(vbox1)
@@ -648,6 +655,13 @@ class ToolBarWidget(QtWidgets.QDockWidget):
 
     def OnRegisterImages(self):
         self.parent.RegisterImages()
+
+    def OnShowScalebar(self):
+        if self.cb_scalebar.isChecked():
+            self.parent.show_scale_bar = 1
+        else:
+            self.parent.show_scale_bar = 0
+        self.parent.ShowImage()
 
 
     def close(self):
@@ -864,7 +878,8 @@ class ViewerFrame(QtWidgets.QWidget):
 
 
 #-----------------------------------------------------------------------
-    def ShowImage(self, image1, image2, cmap1='gray', cmap2='gray'):
+    def ShowImage(self, image1, image2, scale_bar_string, scale_bar_pixels_x, scale_bar_pixels_y,
+                                             cmap1='gray', cmap2='gray'):
 
         if image1 is None and image2 is None:
             fig = self.imgfig
@@ -885,9 +900,21 @@ class ViewerFrame(QtWidgets.QWidget):
         if image2 is not None:
             im = axes.imshow(image2.T, cmap=matplotlib.cm.get_cmap(cmap2), alpha=alpha)
 
+        if self.parent.show_scale_bar == 1:
+            n_cols = image1.shape[1]
+            #um_string = ' $\mathrm{\mu m}$'
+            mm_string = ' $\mathrm{mm}$'
+            microns = '$'+scale_bar_string+' $'+mm_string
+            axes.text(scale_bar_pixels_x+10, n_cols-9, microns, horizontalalignment='left',
+                      verticalalignment='center',color ='white', fontsize=14)
+            # Matplotlib has flipped scales so I'm using rows instead of cols!
+            p = matplotlib.patches.Rectangle((5, n_cols-10), scale_bar_pixels_x, scale_bar_pixels_y,
+                                   color='white', fill=True)
+            axes.add_patch(p)
+
+
         axes.axis("off")
         self.ImagePanel.draw()
-
 
 
 """ ------------------------------------------------------------------------------------------------"""
@@ -902,6 +929,11 @@ class MainFrame(QtWidgets.QMainWindow):
         self.i_selected_dataset2 = -1
         self.data_channel = []
         self.data_cmap = []
+
+        self.show_scale_bar = 1
+        self.scale_bar_string = ''
+        self.scale_bar_pixels_x = 0
+        self.scale_bar_pixels_y = 0
 
         self.transform = None
         self.data_transform = None
@@ -1005,6 +1037,7 @@ class MainFrame(QtWidgets.QMainWindow):
 
             if len(self.data_objects) == 1:
                 self.i_selected_dataset1 = 0
+                self.CalcScaleBar()
 
             if len(self.data_objects) > 1:
                 self.i_selected_dataset2 = len(self.data_objects) - 1
@@ -1071,8 +1104,44 @@ class MainFrame(QtWidgets.QMainWindow):
                     else:
                         image2 = cv2.warpPerspective(image2, self.data_transform, (w1, h1),
                                                         flags=cv2.INTER_LINEAR)
-        self.viewer.ShowImage(image1, image2, cmap1=cmap1, cmap2=cmap2)
+        self.CalcScaleBar()
+        self.viewer.ShowImage(image1, image2, self.scale_bar_string, self.scale_bar_pixels_x, self.scale_bar_pixels_y,
+                              cmap1=cmap1, cmap2=cmap2
+                              )
         QtWidgets.QApplication.restoreOverrideCursor()
+
+
+    # ----------------------------------------------------------------------
+    def CalcScaleBar(self):
+
+        x_start = np.min(self.data_objects[self.i_selected_dataset1].x_coord)
+        x_stop = np.max(self.data_objects[self.i_selected_dataset1].x_coord)
+
+        if 'micro' in str(self.data_objects[self.i_selected_dataset1].motor_units):
+            x_start = x_start/1000
+            x_stop = x_stop/1000
+
+        bar_mm = 0.2 * np.abs(x_stop - x_start)
+
+        if bar_mm >= 10.:
+            bar_mm = 10. * int(0.5 + 0.1 * int(0.5 + bar_mm))
+            bar_string = str(int(0.01 + bar_mm)).strip()
+        elif bar_mm >= 1.:
+            bar_mm = float(int(0.5 + bar_mm))
+            if bar_mm == 1.:
+                bar_string = '1'
+            else:
+                bar_string = str(int(0.01 + bar_mm)).strip()
+        else:
+            bar_mm = np.maximum(0.1 * int(0.5 + 10 * bar_mm), 0.1)
+            bar_string = str(bar_mm).strip()
+        self.scale_bar_string = bar_string
+
+        self.scale_bar_pixels_x = int(0.5 + float(self.data_objects[self.i_selected_dataset1].ny) *
+                                      float(bar_mm) / float(abs(x_stop - x_start)))
+        self.scale_bar_pixels_y = int(0.01 * self.data_objects[self.i_selected_dataset1].nx)
+        if self.scale_bar_pixels_y < 2:
+            self.scale_bar_pixels_y = 2
 
 
 
@@ -1157,7 +1226,12 @@ class MainFrame(QtWidgets.QMainWindow):
 """ ------------------------------------------------------------------------------------------------"""
 def main():
 
+    os.environ["QT_AUTO_SCREEN_SCALE_FACTOR"] = '1'
     app = QtWidgets.QApplication(sys.argv)
+    app.setAttribute(QtCore.Qt.AA_EnableHighDpiScaling)
+    app.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps)
+
+    #app = QtWidgets.QApplication(sys.argv)
     app.setStyle(QtWidgets.QStyleFactory.create('cleanlooks'))
     frame = MainFrame()
     sys.exit(app.exec_())

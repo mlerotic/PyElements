@@ -41,6 +41,8 @@ def read(FileName, ds_object):
     scandata = np.array(F['ImageData']['ScanData']['Data'])
     ny = scandata.shape[0]
     nx = int(scandata[0, 4])
+    ds_object.nx = nx
+    ds_object.ny = ny
     npix = nx*ny
     #print('NX, NY, NPix = ', nx, ny, npix)
 
@@ -70,6 +72,11 @@ def read(FileName, ds_object):
         temp = temp[:, not i_keep]
         ds_object.x_coord = ds_object.x_coord[not i_keep]
         ds_object.y_coord = ds_object.y_coord[not i_keep]
+
+    ds_object.dx = np.round(abs(ds_object.x_coord[-1]-ds_object.x_coord[0])/(nx-1), 5)
+    ds_object.dy = np.round(abs(ds_object.y_coord[-1]-ds_object.y_coord[0])/(ny-1), 5)
+    # print(ds_object.dx, ds_object.dy)
+    # print(ds_object.motor_units)
 
     # check for incomplete rows
     I_empty = np.zeros([nx,ny])

@@ -5,7 +5,6 @@
 The file_plugins system is exposed to general code through the functions defined here in __init__.py:
 
 identify(filename)                  : Returns an instance of the plugin that claims to deal with the file at the URL 'filename'.
-GetFileStructure(filename)          : Returns a structure describing the internal organisation of the file, indicating sets of data available to choose from.
 load(filename,data_store_object,..)      : Loads data from the URL 'filename' into the object (data_store type). The plugin used can be stated or determined automatically, using 'identify'.
 
 Further functions for writing files via the plugins need to be written yet. To access the system, you should import the module ('import file_plugins') and then access the above functions as attributes of the module (e.g. 'file_plugins.load('data.hdf5',data_stk)' ).

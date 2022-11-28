@@ -12,6 +12,8 @@ class DataStore:
         self.peaks = []  # slice names
         self.x_coord = None
         self.y_coord = None
+        self.dx = 0
+        self.dy = 0
         self.motor_units = None
         self.filename = ''
         self.despike = 0

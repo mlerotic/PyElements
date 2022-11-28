@@ -40,6 +40,11 @@ def read(FileName, ds_object):
     ds_object.y_coord = np.reshape(data_dict['handles']['XRF']['Y'], [ds_object.nx, ds_object.ny], order='F')
     ds_object.motor_units = data_dict['handles']['XRF']['X_units']
 
+    ds_object.dx = np.round(abs(ds_object.x_coord[-1][0]-ds_object.x_coord[0][0])/(ds_object.nx-1), 5)
+    ds_object.dy = np.round(abs(ds_object.y_coord[1][-1]-ds_object.y_coord[1][0])/(ds_object.ny-1), 5)
+    # print(ds_object.dx, ds_object.dy)
+    # print(ds_object.motor_units)
+
     print('done')
 
 
