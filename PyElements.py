@@ -350,7 +350,7 @@ class File_GUI():
         dlg = QtWidgets.QFileDialog(None)
         dlg.setWindowTitle('Choose File')
         dlg.setViewMode(QtWidgets.QFileDialog.Detail)
-        #dlg.setOption(QtWidgets.QFileDialog.DontUseNativeDialog)
+        dlg.setOption(QtWidgets.QFileDialog.DontUseNativeDialog)
 
         #dlg.setDirectory(self.last_path)
         dlg.setNameFilters(self.filter_list)
