@@ -124,6 +124,126 @@ def lee_filter(image):
     return lf_image
 
 
+class ShowHistogram(QtWidgets.QDialog, QtWidgets.QGraphicsScene):
+    def __init__(self, parent, data):
+        QtWidgets.QWidget.__init__(self, parent)
+
+        self.parent = parent
+        self.data = data
+
+        self.resize(1000, 550)
+        self.setWindowTitle('Histogram')
+
+        vboxtop = QtWidgets.QVBoxLayout()
+
+        # st = QtWidgets.QLabel('Channel: {0}'.format(data_channel))
+        # font = st.font()
+        # font.setBold(True)
+        # font.setPointSize(10)
+        # st.setFont(font)
+        # vboxtop.addWidget(st)
+        # self.instruction = st
+
+        hboxtop = QtWidgets.QHBoxLayout()
+
+        self.limgfig = Figure((4.0, 4.0))
+        self.lImagePanel = FigureCanvas(self.limgfig)
+        self.lImagePanel.setParent(self)
+        # self.lImagePanel.mpl_connect('button_press_event', self.OnPointLeftimage)
+        # self.lImagePanel.setCursor(Qt.CrossCursor)
+        hboxtop.addWidget(self.lImagePanel, 1)
+
+        frame = QtWidgets.QFrame()
+        frame.setFrameStyle(QtWidgets.QFrame.StyledPanel|QtWidgets.QFrame.Sunken)
+        fbox = QtWidgets.QVBoxLayout()
+
+        self.rimgfig = Figure()
+        self.rImagePanel = FigureCanvas(self.rimgfig)
+        self.rImagePanel.setParent(self)
+        # self.rImagePanel.mpl_connect('button_press_event', self.OnPointRightimage)
+        # self.rImagePanel.setCursor(Qt.CrossCursor)
+
+        fbox.addWidget(self.rImagePanel)
+        toolbar = NavigationToolbar(self.rImagePanel, self)
+        fbox.addWidget(toolbar)
+        frame.setLayout(fbox)
+        hboxtop.addWidget(frame, 2)
+
+        vboxtop.addLayout(hboxtop)
+
+        hboxb = QtWidgets.QHBoxLayout()
+        hboxb.addStretch(1)
+
+        button_export = QtWidgets.QPushButton('Export to .csv')
+        button_export.clicked.connect(self.OnExport)
+        hboxb.addWidget(button_export)
+
+        button_cancel = QtWidgets.QPushButton('Close')
+        button_cancel.clicked.connect(self.close)
+        hboxb.addWidget(button_cancel)
+
+        vboxtop.addLayout(hboxb)
+        self.setLayout(vboxtop)
+
+        self.ShowImage()
+        self.ShowHistogram()
+
+
+    def ShowImage(self):
+        if self.data.display_image is None:
+            return
+
+        fig = self.limgfig
+        fig.clf()
+        fig.add_axes(((0.0,0.0,1.0,1.0)))
+        self.laxes = fig.gca()
+        fig.patch.set_alpha(1.0)
+        im = self.laxes.imshow(self.data.display_image.T, cmap=matplotlib.cm.get_cmap('gray'))
+        self.laxes.axis("off")
+        self.lImagePanel.draw()
+
+    def ShowHistogram(self):
+        n_channels = self.data.np
+        self.histogram = np.sum(self.data.image_data, axis=(1,2))
+        fig = self.rimgfig
+        fig.clf()
+        fig.add_axes((0.15, 0.15, 0.75, 0.75))
+        axes = fig.gca()
+        # axes.fill_between(range(n_channels), histogram, step="pre")
+        # axes.step(range(n_channels), histogram)
+        bar_plot = axes.bar(range(1, n_channels+1), self.histogram, width=1)
+        axes.set_ylim(bottom=0)
+        axes.set_xlim(left=1, right=n_channels+1)
+        axes.set_xlabel('Channel')
+        axes.set_ylabel('Counts')
+        axes.format_coord = self.format_coord
+        # axes.set_xticks(range(n_channels))
+        # fig.autofmt_xdate()
+
+        self.rImagePanel.draw()
+
+    def format_coord(self, x, y):
+        col = int(x+0.5)
+        row = int(y+0.5)
+        if col >= 1 and col < self.data.np+1:
+            z = self.data.peaks[int(col-1)]
+            return 'channel=%s [x=%1.0f, y=%1.4f]' % (z, x, y)
+        else:
+            return '[x=%1.0f, y=%1.4f]' % (x, y)
+
+    def OnExport(self):
+        wildcard = "Csv files (*.csv);;"
+        SaveFileName, _filter = QtWidgets.QFileDialog.getSaveFileName(self, 'Save Histogram data', '', wildcard)
+        SaveFileName = str(SaveFileName)
+        if SaveFileName == '':
+            return
+        f = open(str(SaveFileName), 'wt')
+        print('Channel number, Counts, Channel name', file=f)
+        for i in range(self.data.np):
+            print('{0}, {1}, {2}'.format(i+1, self.histogram[i], self.data.peaks[i]), file=f)
+        f.close()
+
+
 class ImageRegistrationDialog(QtWidgets.QDialog):
 
     def __init__(self, parent, image1, image2):
@@ -876,16 +996,21 @@ class DataViewerWidget(QtWidgets.QDockWidget):
 
         hbox3 = QtWidgets.QHBoxLayout()
         self.l_gamma = QtWidgets.QLabel(self)
-        self.l_gamma.setText('Gamma:  \t{0:5.2f}'.format(self.data.gamma))
+        self.l_gamma.setText('Gamma: {0:5.2f}'.format(self.data.gamma))
         hbox3.addWidget(self.l_gamma)
         self.sl_gamma = QtWidgets.QSlider(QtCore.Qt.Horizontal, self)
         self.sl_gamma.setRange(1, 20)
         self.sl_gamma.setValue(int(self.data.gamma*10))
         self.sl_gamma.setFocusPolicy(QtCore.Qt.StrongFocus)
         self.sl_gamma.valueChanged[int].connect(self.OnScrollGamma)
-        self.sl_gamma.setMinimumWidth(120)
+        self.sl_gamma.setMinimumWidth(100)
         hbox3.addWidget(self.sl_gamma)
         vbox1.addLayout(hbox3)
+
+        b_histogram = QtWidgets.QPushButton('Show Histogram')
+        # b_histogram.setMaximumWidth(220)
+        b_histogram.clicked.connect(self.OnShowHistogram)
+        vbox1.addWidget(b_histogram)
 
         frame.setLayout(vbox1)
         self.setWidget(frame)
@@ -966,6 +1091,11 @@ class DataViewerWidget(QtWidgets.QDockWidget):
         else:
             self.data.despike = 0
         self.parent.ShowImage()
+
+    def OnShowHistogram(self):
+        data_channel = self.parent.data_channel[self.data_index]
+        hist_dialog = ShowHistogram(self, self.data)
+        hist_dialog.show()
 
     def closeEvent(self, event):
 
@@ -1215,6 +1345,7 @@ class MainFrame(QtWidgets.QMainWindow):
         if (data.gamma != 1.0):
             img[img<0] = 0
             img = np.power(img, data.gamma)
+        data.display_image = img
         return img
 
     def ShowImage(self):

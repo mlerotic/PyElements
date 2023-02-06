@@ -19,6 +19,7 @@ class DataStore:
         self.despike = 0
         self.threshold = [0, 100]
         self.gamma = 1.0
+        self.display_image = None
 
 
     def MirrorUD(self):
