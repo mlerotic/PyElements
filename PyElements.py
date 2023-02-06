@@ -15,6 +15,7 @@ from matplotlib.widgets import LassoSelector
 matplotlib.interactive( True )
 matplotlib.rcParams['svg.fonttype'] = 'none'
 from matplotlib import cm
+import matplotlib.pyplot as plt
 import cv2
 import numpy as np
 import scipy as sp
@@ -131,25 +132,60 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
         self.parent = parent
         self.image1 = image1
         self.image2 = image2
+        self.aligned_image = None
         self.lpoints = []
         self.rpoints = []
-        self.transform = 'affine'
+        self.transform = 'homography'
+        self.n_segments = 4
+        self.data_transformH = None
+        self.data_transform_fine = None
 
         self.resize(1050, 750)
         self.setWindowTitle('Image Alignment')
 
         vboxtop = QtWidgets.QVBoxLayout()
-        st = QtWidgets.QLabel('Select alignment method:')
-        self.rb_affine = QtWidgets.QRadioButton('Affine', self)
-        self.rb_hom = QtWidgets.QRadioButton('Homography',self)
-        self.rb_affine.setChecked(True)
-        self.rb_affine.toggled.connect(self.OnMethod)
-        vboxtop.addWidget(st)
-        vboxtop.addWidget(self.rb_affine)
-        vboxtop.addWidget(self.rb_hom)
+        hboxtop = QtWidgets.QHBoxLayout()
+        sizer1 = QtWidgets.QGroupBox('Manual Alignment')
+        vbox1 = QtWidgets.QVBoxLayout()
+        st = QtWidgets.QLabel('1 - Select points on the images\n2 - Calculate Homography')
+        # self.rb_affine = QtWidgets.QRadioButton('Affine', self)
+        # self.rb_hom = QtWidgets.QRadioButton('Homography',self)
+        # self.rb_affine.setChecked(True)
+        # self.rb_affine.toggled.connect(self.OnMethod)
+        vbox1.addWidget(st)
+        # vbox1.addWidget(self.rb_affine)
+        # vbox1.addWidget(self.rb_hom)
+        button_calc_homography = QtWidgets.QPushButton('Calculate Homography')
+        button_calc_homography.setMaximumWidth(220)
+        button_calc_homography.clicked.connect(self.OnCalculateHomography)
+        vbox1.addWidget(button_calc_homography)
+        sizer1.setLayout(vbox1)
+        hboxtop.addWidget(sizer1, 1)
+        sizer2 = QtWidgets.QGroupBox('Fine Automatic alignment')
+        vbox2 = QtWidgets.QVBoxLayout()
+        st = QtWidgets.QLabel('Segmented cross-correlation method:')
+        vbox2.addWidget(st)
+        hbox2 = QtWidgets.QHBoxLayout()
+        hbox2.addWidget(QtWidgets.QLabel('NxN segments:  '))
+        self.le_nsegments = QtWidgets.QLineEdit()
+        self.le_nsegments.setText('{0}'.format(self.n_segments))
+        self.le_nsegments.setMaximumWidth(150)
+        self.le_nsegments.setAlignment(QtCore.Qt.AlignRight)
+        self.le_nsegments.setValidator(QtGui.QIntValidator(2, 10, self))
+        hbox2.addWidget(self.le_nsegments)
+        hbox2.addStretch(1)
+        vbox2.addLayout(hbox2)
+        self.b_ccr_alignment = QtWidgets.QPushButton('Calculate Fine')
+        self.b_ccr_alignment.setMaximumWidth(220)
+        self.b_ccr_alignment.clicked.connect(self.OnCalculateCC)
+        self.b_ccr_alignment.setEnabled(False)
+        vbox2.addWidget(self.b_ccr_alignment)
+        sizer2.setLayout(vbox2)
+        hboxtop.addWidget(sizer2, 1)
+        vboxtop.addLayout(hboxtop)
         vboxtop.addSpacing(20)
 
-        st = QtWidgets.QLabel('Select 3 points on the left image and 3 corresponding points on the right.')
+        st = QtWidgets.QLabel('Select at least 5 points on the left image and 5 corresponding points on the right.')
         font = st.font()
         font.setBold(True)
         font.setPointSize(10)
@@ -193,11 +229,11 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
 
         hboxb = QtWidgets.QHBoxLayout()
         hboxb.addStretch(1)
-        button_save = QtWidgets.QPushButton('Apply')
-        button_save.clicked.connect(self.OnApply)
-        hboxb.addWidget(button_save)
+        # button_save = QtWidgets.QPushButton('Apply')
+        # button_save.clicked.connect(self.OnApply)
+        # hboxb.addWidget(button_save)
 
-        button_clear = QtWidgets.QPushButton('Clear Points')
+        button_clear = QtWidgets.QPushButton('Reset')
         button_clear.clicked.connect(self.OnClear)
         hboxb.addWidget(button_clear)
 
@@ -205,9 +241,10 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
         button_cancel.clicked.connect(self.close)
         hboxb.addWidget(button_cancel)
 
-        button_save = QtWidgets.QPushButton('Save')
-        button_save.clicked.connect(self.OnSave)
-        hboxb.addWidget(button_save)
+        self.b_save = QtWidgets.QPushButton('Save')
+        self.b_save.clicked.connect(self.OnSave)
+        hboxb.addWidget(self.b_save)
+        self.b_save.setEnabled(False)
 
         vboxtop.addLayout(hboxb)
 
@@ -278,10 +315,14 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
     def OnClear(self):
         self.lpoints = []
         self.rpoints = []
+        self.data_transformH = None
+        self.data_transform_fine = None
         self.t_status.clear()
         self.ShowImage(self.image1, self.image2)
+        self.b_ccr_alignment.setEnabled(False)
+        self.b_save.setEnabled(False)
 
-    def OnApply(self):
+    def OnCalculateHomography(self):
         if self.transform == 'affine':
             npts = 3
             if len(self.lpoints) != npts or len(self.rpoints) != npts:
@@ -307,13 +348,19 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
             H, status = cv2.findHomography(pts2, pts1)
             al_image2 = cv2.warpPerspective(self.image2, H, (w1, h1),
                                               flags=cv2.INTER_LINEAR)
+        self.b_ccr_alignment.setEnabled(True)
+        self.b_save.setEnabled(True)
 
-        self.data_transform = H
+        self.data_transformH = H
         self.ShowImage(self.image1, al_image2)
+        self.aligned_image = al_image2
         QtWidgets.QApplication.restoreOverrideCursor()
 
     def OnSave(self):
-        self.parent.data_transform = self.data_transform
+        if self.data_transform_fine is not None:
+            self.parent.data_transform = self.data_transform_fine
+        else:
+            self.data_transform = self.data_transformH
         self.parent.transform = self.transform
         self.parent.ShowImage()
         self.close()
@@ -330,6 +377,58 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
             self.instruction.setText('Select at least 5 points on the left image and 5 corresponding points on the right.')
 
         self.OnClear()
+
+    def OnCalculateCC(self):
+        if self.aligned_image is None:
+            return
+        self.n_segments = int(self.le_nsegments.text())
+        iw, ih = self.aligned_image.shape
+        tw, th = int(iw / self.n_segments), int(ih / self.n_segments)
+        plt.figure()
+        plt.imshow(self.aligned_image.T, 'gray', interpolation='none')
+        for i in range(1, self.n_segments):
+            plt.plot([0, iw], [i * th, i * th], 'red')
+            plt.plot([i * tw, i * tw], [0, ih], 'red')
+        plt.show()
+
+        points1 = []
+        points2 = []
+
+        method = eval('cv2.TM_CCORR_NORMED')
+        for i in range(0, self.n_segments):
+            for j in range(0, self.n_segments):
+
+                template1 = self.image1[i * tw:(i + 1) * tw, j * th:(j + 1) * th]
+                img = template1.copy() / np.amax(template1)
+                template2 = self.aligned_image[i * tw+5:(i + 1) * tw-5, j * th+5:(j + 1) * th-5]
+                # print('shapes', template1.shape[::-1], template2.shape[::-1])
+                w, h = template2.shape[::-1]
+
+                # Apply template Matching
+                res = cv2.matchTemplate(template1.astype(np.float32), template2.astype(np.float32), method)
+                min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
+                # print('correlation', max_val)
+                top_left = max_loc
+                top_left_true = [max_loc[0], max_loc[1]]
+                points1.append((i * tw, j * th))
+                points2.append((i * tw + top_left[1], j * th + top_left[0]))
+
+        pts1 = np.float32(points1)
+        pts2 = np.float32(points2)
+        h1, w1 = self.image1.shape[:2]
+        h2, w2 = self.aligned_image.shape[:2]
+
+        H, status = cv2.findHomography(pts1, pts2)
+        al_image2 = cv2.warpPerspective(self.aligned_image, H, (w1, h1), flags=cv2.INTER_LINEAR)
+
+        self.data_transform_fine = np.matmul(H, self.data_transformH)
+        self.ShowImage(self.image1, al_image2)
+
+        # test_im = cv2.warpPerspective(self.image2, combined_transform, (w1, h1), flags=cv2.INTER_LINEAR)
+        # plt.figure()
+        # plt.imshow(test_im.T, 'gray', interpolation='none')
+        # plt.show()
+
 
 
 class File_GUI():
