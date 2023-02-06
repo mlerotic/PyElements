@@ -22,6 +22,7 @@ import scipy as sp
 from scipy.ndimage import median_filter, uniform_filter
 import file_plugins
 import data_store
+from QRangeSlider import QRangeSlider
 
 
 Winsizex = 1000
@@ -856,14 +857,22 @@ class DataViewerWidget(QtWidgets.QDockWidget):
 
         hbox2 = QtWidgets.QHBoxLayout()
         self.tc_thrmax = QtWidgets.QLabel(self)
-        self.tc_thrmax.setText('Threshold Max:')
+        self.tc_thrmax.setText('Threshold:')
         hbox2.addWidget(self.tc_thrmax)
-        self.slider_thrmax = QtWidgets.QSlider(QtCore.Qt.Horizontal, self)
-        self.slider_thrmax.setRange(1, 100)
-        self.slider_thrmax.setValue(100)
-        self.slider_thrmax.setFocusPolicy(QtCore.Qt.StrongFocus)
-        self.slider_thrmax.valueChanged[int].connect(self.OnThreshold)
-        hbox2.addWidget(self.slider_thrmax)
+
+        self.sl_thresh = QRangeSlider()
+        # self.sl_thresh.setRange(0, 100)
+        # self.sl_thresh.setStart(0)
+        # self.sl_thresh.setEnd(100)
+        self.sl_thresh.endValueChanged[int].connect(self.SetThreshRangeEnd)
+        self.sl_thresh.startValueChanged[int].connect(self.SetThreshRangeStart)
+
+        # self.slider_thrmax = QtWidgets.QSlider(QtCore.Qt.Horizontal, self)
+        # self.slider_thrmax.setRange(1, 100)
+        # self.slider_thrmax.setValue(100)
+        # self.slider_thrmax.setFocusPolicy(QtCore.Qt.StrongFocus)
+        # self.slider_thrmax.valueChanged[int].connect(self.OnThreshold)
+        hbox2.addWidget(self.sl_thresh)
         vbox1.addLayout(hbox2)
 
         frame.setLayout(vbox1)
@@ -877,6 +886,13 @@ class DataViewerWidget(QtWidgets.QDockWidget):
         cursor = QtGui.QCursor()
         self.popMenu.exec_(cursor.pos())
 
+    def SetThreshRangeEnd(self, val):
+        self.data.threshold[1] = float(val)
+        self.parent.ShowImage()
+
+    def SetThreshRangeStart(self, val):
+        self.data.threshold[0] = float(val)
+        self.parent.ShowImage()
 
     def GetImage(self):
         self.image = median_filter(self.data.image_data[
@@ -934,10 +950,6 @@ class DataViewerWidget(QtWidgets.QDockWidget):
             self.data.despike = 0
         self.parent.ShowImage()
 
-    def OnThreshold(self, value):
-        self.data.threshold = value
-        self.parent.ShowImage()
-
     def closeEvent(self, event):
 
         returnValue = QtWidgets.QMessageBox.question(self, 'Close dataset', "Are you sure to close the dataset?",
@@ -992,15 +1004,18 @@ class ViewerFrame(QtWidgets.QWidget):
         axes = fig.gca()
         fig.patch.set_alpha(1.0)
 
+        n_cols = 0
         alpha = 1
         if image1 is not None:
             im = axes.imshow(image1.T, cmap=matplotlib.cm.get_cmap(cmap1))
+            n_cols = image1.shape[1]
             alpha = 0.5
         if image2 is not None:
             im = axes.imshow(image2.T, cmap=matplotlib.cm.get_cmap(cmap2), alpha=alpha)
+            if n_cols == 0:
+                n_cols = image2.shape[1]
 
         if self.parent.show_scale_bar == 1:
-            n_cols = image1.shape[1]
             #um_string = ' $\mathrm{\mu m}$'
             mm_string = ' $\mathrm{mm}$'
             microns = '$'+scale_bar_string+' $'+mm_string
@@ -1173,9 +1188,12 @@ class MainFrame(QtWidgets.QMainWindow):
         img = data.image_data[data_channel, :, :].copy()
         if data.despike == 1:
             img = despike(img)
-        if data.threshold != 100:
-            thrnum = np.amax(img)*data.threshold/100.
+        if data.threshold[1] != 100:
+            thrnum = np.amax(img)*data.threshold[1]/100.
             img[img > thrnum] = thrnum
+        if data.threshold[0] != 0:
+            thrnum = np.amax(img)*data.threshold[0]/100.
+            img[img < thrnum] = thrnum
         return img
 
     def ShowImage(self):
