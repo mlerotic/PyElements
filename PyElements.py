@@ -791,7 +791,7 @@ class DataViewerWidget(QtWidgets.QDockWidget):
                                    border: black solid 1px
                                    }""")
 
-        self.setFixedSize(160, 250)
+        self.setFixedSize(200, 300)
         self.setWindowTitle(os.path.splitext(os.path.basename(self.data.filename))[0])
 
         frame = QtWidgets.QFrame()
@@ -841,13 +841,15 @@ class DataViewerWidget(QtWidgets.QDockWidget):
         self.cmaps = ["gray","jet","autumn","bone", "cool","copper", "flag","hot","hsv","pink", "prism","spring",
                       "summer","winter"]
 
+        hbox1 = QtWidgets.QHBoxLayout()
         st = QtWidgets.QLabel('Colormap:')
-        vbox1.addWidget(st)
+        hbox1.addWidget(st)
         self.cb_cmap = QtWidgets.QComboBox(self)
         self.cb_cmap.addItems(self.cmaps)
         self.cb_cmap.setCurrentIndex(0)
         self.cb_cmap.currentIndexChanged.connect(self.OnCmapChange)
-        vbox1.addWidget(self.cb_cmap)
+        hbox1.addWidget(self.cb_cmap)
+        vbox1.addLayout(hbox1)
 
         self.cb_despike = QtWidgets.QCheckBox('Despike', self)
         if self.data.despike == 1:
@@ -859,11 +861,8 @@ class DataViewerWidget(QtWidgets.QDockWidget):
         self.tc_thrmax = QtWidgets.QLabel(self)
         self.tc_thrmax.setText('Threshold:')
         hbox2.addWidget(self.tc_thrmax)
-
         self.sl_thresh = QRangeSlider()
-        # self.sl_thresh.setRange(0, 100)
-        # self.sl_thresh.setStart(0)
-        # self.sl_thresh.setEnd(100)
+        self.sl_thresh.setMaximumHeight(25)
         self.sl_thresh.endValueChanged[int].connect(self.SetThreshRangeEnd)
         self.sl_thresh.startValueChanged[int].connect(self.SetThreshRangeStart)
 
@@ -874,6 +873,19 @@ class DataViewerWidget(QtWidgets.QDockWidget):
         # self.slider_thrmax.valueChanged[int].connect(self.OnThreshold)
         hbox2.addWidget(self.sl_thresh)
         vbox1.addLayout(hbox2)
+
+        hbox3 = QtWidgets.QHBoxLayout()
+        self.l_gamma = QtWidgets.QLabel(self)
+        self.l_gamma.setText('Gamma:  \t{0:5.2f}'.format(self.data.gamma))
+        hbox3.addWidget(self.l_gamma)
+        self.sl_gamma = QtWidgets.QSlider(QtCore.Qt.Horizontal, self)
+        self.sl_gamma.setRange(1, 20)
+        self.sl_gamma.setValue(int(self.data.gamma*10))
+        self.sl_gamma.setFocusPolicy(QtCore.Qt.StrongFocus)
+        self.sl_gamma.valueChanged[int].connect(self.OnScrollGamma)
+        self.sl_gamma.setMinimumWidth(120)
+        hbox3.addWidget(self.sl_gamma)
+        vbox1.addLayout(hbox3)
 
         frame.setLayout(vbox1)
         self.setWidget(frame)
@@ -892,6 +904,11 @@ class DataViewerWidget(QtWidgets.QDockWidget):
 
     def SetThreshRangeStart(self, val):
         self.data.threshold[0] = float(val)
+        self.parent.ShowImage()
+
+    def OnScrollGamma(self, value):
+        self.data.gamma = float(value) / 10.0
+        self.l_gamma.setText('Gamma: {0:5.2f}'.format(self.data.gamma))
         self.parent.ShowImage()
 
     def GetImage(self):
@@ -1194,6 +1211,10 @@ class MainFrame(QtWidgets.QMainWindow):
             img[img > thrnum] = thrnum
             thrnum = imgmax*data.threshold[0]/100.
             img[img < thrnum] = thrnum
+
+        if (data.gamma != 1.0):
+            img[img<0] = 0
+            img = np.power(img, data.gamma)
         return img
 
     def ShowImage(self):
