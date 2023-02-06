@@ -1188,11 +1188,11 @@ class MainFrame(QtWidgets.QMainWindow):
         img = data.image_data[data_channel, :, :].copy()
         if data.despike == 1:
             img = despike(img)
-        if data.threshold[1] != 100:
-            thrnum = np.amax(img)*data.threshold[1]/100.
+        if data.threshold[1] != 100 or data.threshold[0] != 0:
+            imgmax = np.amax(img)
+            thrnum = imgmax*data.threshold[1]/100.
             img[img > thrnum] = thrnum
-        if data.threshold[0] != 0:
-            thrnum = np.amax(img)*data.threshold[0]/100.
+            thrnum = imgmax*data.threshold[0]/100.
             img[img < thrnum] = thrnum
         return img
 
