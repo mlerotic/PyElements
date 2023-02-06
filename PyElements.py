@@ -1362,7 +1362,7 @@ class MainFrame(QtWidgets.QMainWindow):
                 cmap1 = self.data_cmap[self.i_selected_dataset1]
 
         if len(self.data_objects) > 0:
-         if self.i_selected_dataset2 >= 0:
+            if self.i_selected_dataset2 >= 0:
                 data = self.data_objects[self.i_selected_dataset2]
                 image2 = self.GetImage(data, self.data_channel[self.i_selected_dataset2])
                 cmap2 = self.data_cmap[self.i_selected_dataset2]
@@ -1373,7 +1373,7 @@ class MainFrame(QtWidgets.QMainWindow):
                     else:
                         image2 = cv2.warpPerspective(image2, self.data_transform, (w1, h1),
                                                         flags=cv2.INTER_LINEAR)
-        self.CalcScaleBar()
+            self.CalcScaleBar()
         self.viewer.ShowImage(image1, image2, self.scale_bar_string, self.scale_bar_pixels_x, self.scale_bar_pixels_y,
                               cmap1=cmap1, cmap2=cmap2
                               )
