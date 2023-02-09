@@ -481,7 +481,7 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
         if self.data_transform_fine is not None:
             self.parent.data_transform = self.data_transform_fine
         else:
-            self.data_transform = self.data_transformH
+            self.parent.data_transform = self.data_transformH
         self.parent.transform = self.transform
         self.parent.ShowImage()
         self.close()
