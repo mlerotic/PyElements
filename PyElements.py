@@ -212,10 +212,11 @@ class ShowHistogram(QtWidgets.QDialog, QtWidgets.QGraphicsScene):
         # axes.fill_between(range(n_channels), histogram, step="pre")
         # axes.step(range(n_channels), histogram)
         bar_plot = axes.bar(range(1, n_channels+1), self.histogram, width=1)
-        axes.set_ylim(bottom=0)
+        # axes.set_ylim(bottom=0)
         axes.set_xlim(left=1, right=n_channels+1)
         axes.set_xlabel('Channel')
         axes.set_ylabel('Counts')
+        axes.set_yscale('log')
         axes.format_coord = self.format_coord
         # axes.set_xticks(range(n_channels))
         # fig.autofmt_xdate()
@@ -1007,7 +1008,7 @@ class DataViewerWidget(QtWidgets.QDockWidget):
         hbox3.addWidget(self.sl_gamma)
         vbox1.addLayout(hbox3)
 
-        b_histogram = QtWidgets.QPushButton('Show Histogram')
+        b_histogram = QtWidgets.QPushButton('Show Counts/Channel')
         # b_histogram.setMaximumWidth(220)
         b_histogram.clicked.connect(self.OnShowHistogram)
         vbox1.addWidget(b_histogram)
