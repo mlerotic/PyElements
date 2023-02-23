@@ -798,7 +798,7 @@ class ToolBarWidget(QtWidgets.QDockWidget):
                                    border: black solid 1px
                                    }""")
 
-        self.setFixedSize(120,300)
+        self.setFixedSize(200, 430)
         self.setWindowTitle('Toolbar')
 
         frame = QtWidgets.QFrame()
@@ -835,6 +835,27 @@ class ToolBarWidget(QtWidgets.QDockWidget):
         self.cb_scalebar.stateChanged.connect(self.OnShowScalebar)
         vbox1.addWidget(self.cb_scalebar)
 
+        sizer3 = QtWidgets.QGroupBox('RGB Map')
+        vboxs3 = QtWidgets.QVBoxLayout()
+        self.cb_rgb = QtWidgets.QCheckBox('Show RBG', self)
+        self.cb_rgb.stateChanged.connect(self.OnShowRBG)
+        vboxs3.addWidget(self.cb_rgb)
+        vboxs3.addWidget(QtWidgets.QLabel('Red:'))
+        self.cb_red = QtWidgets.QComboBox(self)
+        self.cb_red.currentIndexChanged.connect(self.OnRGBCChanged)
+        vboxs3.addWidget(self.cb_red)
+        vboxs3.addWidget(QtWidgets.QLabel('Green:'))
+        self.cb_green = QtWidgets.QComboBox(self)
+        self.cb_green.currentIndexChanged.connect(self.OnRGBCChanged)
+        vboxs3.addWidget(self.cb_green)
+        vboxs3.addWidget(QtWidgets.QLabel('Blue:'))
+        self.cb_blue = QtWidgets.QComboBox(self)
+        self.cb_blue.currentIndexChanged.connect(self.OnRGBCChanged)
+        vboxs3.addWidget(self.cb_blue)
+
+        sizer3.setLayout(vboxs3)
+        vbox1.addWidget(sizer3)
+
         vbox1.addStretch(1)
         frame.setLayout(vbox1)
         self.setWidget(frame)
@@ -854,22 +875,17 @@ class ToolBarWidget(QtWidgets.QDockWidget):
 
 
     def RemoveData(self, data_index):
-
         del self.dataset_names[data_index]
 
         self.cb_data1.removeItem(data_index+1)
         self.cb_data2.removeItem(data_index+1)
 
-
-
     def OnData1(self):
-
         self.parent.i_selected_dataset1 = self.cb_data1.currentIndex() - 1
         self.parent.ShowImage()
 
 
     def OnData2(self):
-
         self.parent.i_selected_dataset2 = self.cb_data2.currentIndex() - 1
         self.parent.ShowImage()
 
@@ -884,6 +900,26 @@ class ToolBarWidget(QtWidgets.QDockWidget):
             self.parent.show_scale_bar = 0
         self.parent.ShowImage()
 
+    def OnShowRBG(self):
+        if self.cb_rgb.isChecked():
+            self.parent.show_rgb = True
+        else:
+            self.parent.show_rgb = False
+        self.parent.ShowImage()
+
+    def AddRBGChannels(self, channel_list):
+        self.cb_red.addItems(channel_list)
+        self.cb_red.setCurrentIndex(self.parent.red_ch)
+        self.cb_green.addItems(channel_list)
+        self.cb_green.setCurrentIndex(self.parent.green_ch)
+        self.cb_blue.addItems(channel_list)
+        self.cb_blue.setCurrentIndex(self.parent.blue_ch)
+
+    def OnRGBCChanged(self):
+        self.parent.red_ch = self.cb_red.currentIndex()
+        self.parent.green_ch = self.cb_green.currentIndex()
+        self.parent.blue_ch = self.cb_blue.currentIndex()
+        self.parent.ShowImage()
 
     def close(self):
         self.hide()
@@ -1138,7 +1174,7 @@ class ViewerFrame(QtWidgets.QWidget):
 
 #-----------------------------------------------------------------------
     def ShowImage(self, image1, image2, scale_bar_string, scale_bar_pixels_x, scale_bar_pixels_y,
-                                             cmap1='gray', cmap2='gray'):
+                                             cmap1='gray', cmap2='gray', show_rgb=False):
 
         if image1 is None and image2 is None:
             fig = self.imgfig
@@ -1154,21 +1190,29 @@ class ViewerFrame(QtWidgets.QWidget):
 
         n_cols = 0
         alpha = 1
-        if image1 is not None:
-            im = axes.imshow(image1.T, cmap=matplotlib.cm.get_cmap(cmap1))
-            n_cols = image1.shape[1]
-            alpha = 0.5
-        if image2 is not None:
-            im = axes.imshow(image2.T, cmap=matplotlib.cm.get_cmap(cmap2), alpha=alpha)
-            if n_cols == 0:
-                n_cols = image2.shape[1]
+        if show_rgb:
+            im = axes.imshow(image1)
+            n_cols = image1.shape[0]
+            if image2 is not None:
+                im = axes.imshow(image2, alpha=0.5)
+                if n_cols == 0:
+                    n_cols = image2.shape[0]
+        else:
+            if image1 is not None:
+                im = axes.imshow(image1.T, cmap=matplotlib.cm.get_cmap(cmap1))
+                n_cols = image1.shape[1]
+                alpha = 0.5
+            if image2 is not None:
+                im = axes.imshow(image2.T, cmap=matplotlib.cm.get_cmap(cmap2), alpha=alpha)
+                if n_cols == 0:
+                    n_cols = image2.shape[1]
 
         if self.parent.show_scale_bar == 1:
             #um_string = ' $\mathrm{\mu m}$'
             mm_string = ' $\mathrm{mm}$'
             microns = '$'+scale_bar_string+' $'+mm_string
             axes.text(scale_bar_pixels_x+10, n_cols-9, microns, horizontalalignment='left',
-                      verticalalignment='center',color ='white', fontsize=14)
+                      verticalalignment='center', color ='white', fontsize=14)
             # Matplotlib has flipped scales so I'm using rows instead of cols!
             p = matplotlib.patches.Rectangle((5, n_cols-10), scale_bar_pixels_x, scale_bar_pixels_y,
                                    color='white', fill=True)
@@ -1191,11 +1235,18 @@ class MainFrame(QtWidgets.QMainWindow):
         self.i_selected_dataset2 = -1
         self.data_channel = []
         self.data_cmap = []
+        self.data_names = []
 
         self.show_scale_bar = 1
         self.scale_bar_string = ''
         self.scale_bar_pixels_x = 0
         self.scale_bar_pixels_y = 0
+
+        self.show_rgb = False
+        self.red_ch = 0
+        self.green_ch = 0
+        self.blue_ch = 0
+        self.channel_list = []
 
         self.transform = None
         self.data_transform = None
@@ -1289,12 +1340,15 @@ class MainFrame(QtWidgets.QMainWindow):
             else:
                 self.data_channel.append(78)
 
+            self.data_names.append(data.data_type)
             self.data_cmap.append('gray')
 
             datawin = DataViewerWidget(self, data, len(self.data_objects) - 1)
             self.addDockWidget(Qt.TopDockWidgetArea, datawin)
 
             self.tb_widget.AddData(data.data_type)
+            self.UpdateChannelList(data.data_type, data)
+            self.tb_widget.AddRBGChannels(self.channel_list)
             self.data_widgets.append(datawin)
 
             if len(self.data_objects) == 1:
@@ -1309,6 +1363,9 @@ class MainFrame(QtWidgets.QMainWindow):
             QtWidgets.QApplication.restoreOverrideCursor()
 
 
+    def UpdateChannelList(self, data_type, data):
+        for i in range(len(data.peaks)):
+            self.channel_list.append('{0}: {1}'.format(data_type, data.peaks[i]))
 
     def CloseDataset(self, dataindex):
         print('Closing dataset {0}'.format(self.data_objects[dataindex].filename))
@@ -1356,28 +1413,95 @@ class MainFrame(QtWidgets.QMainWindow):
         image2 = None
         cmap1 = ''
         cmap2 = ''
-        if self.i_selected_dataset1 >= 0:
-            if len(self.data_objects) > 0:
-                data = self.data_objects[self.i_selected_dataset1]
-                image1 = self.GetImage(data, self.data_channel[self.i_selected_dataset1])
-                cmap1 = self.data_cmap[self.i_selected_dataset1]
+        if self.show_rgb is False:
+            if self.i_selected_dataset1 >= 0:
+                if len(self.data_objects) > 0:
+                    data = self.data_objects[self.i_selected_dataset1]
+                    image1 = self.GetImage(data, self.data_channel[self.i_selected_dataset1])
+                    cmap1 = self.data_cmap[self.i_selected_dataset1]
 
-        if len(self.data_objects) > 0:
-            if self.i_selected_dataset2 >= 0:
-                data = self.data_objects[self.i_selected_dataset2]
-                image2 = self.GetImage(data, self.data_channel[self.i_selected_dataset2])
-                cmap2 = self.data_cmap[self.i_selected_dataset2]
-                if self.data_transform is not None:
-                    h1, w1 = image1.shape[:2]
-                    if self.transform == 'affine':
-                        image2 = cv2.warpAffine(image2, self.data_transform, (w1, h1))
-                    else:
-                        image2 = cv2.warpPerspective(image2, self.data_transform, (w1, h1),
-                                                        flags=cv2.INTER_LINEAR)
-            self.CalcScaleBar()
+            if len(self.data_objects) > 0:
+                if self.i_selected_dataset2 >= 0:
+                    data = self.data_objects[self.i_selected_dataset2]
+                    image2 = self.GetImage(data, self.data_channel[self.i_selected_dataset2])
+                    cmap2 = self.data_cmap[self.i_selected_dataset2]
+                    if self.data_transform is not None:
+                        h1, w1 = image1.shape[:2]
+                        if self.transform == 'affine':
+                            image2 = cv2.warpAffine(image2, self.data_transform, (w1, h1))
+                        else:
+                            image2 = cv2.warpPerspective(image2, self.data_transform, (w1, h1),
+                                                            flags=cv2.INTER_LINEAR)
+        else:
+            image1 = np.zeros((self.data_objects[0].ny, self.data_objects[0].nx, 3),
+                              dtype=self.data_objects[0].image_data.dtype)
+            im1scale = 255
+            if self.data_objects[0].image_data.dtype in [np.float32, np.float64, float]:
+                im1scale = 1
+            if len(self.data_objects) > 1:
+                image2 = np.zeros((self.data_objects[1].ny, self.data_objects[1].nx, 3),
+                                  dtype=self.data_objects[1].image_data.dtype)
+                im2scale = 255
+                if self.data_objects[1].image_data.dtype in [np.float32, np.float64, float]:
+                    im2scale = 1
+            haveimg1 = False
+            haveimg2 = False
+            if self.red_ch < self.data_objects[0].np:
+                r_ds = 0
+                ir = self.red_ch
+                r_image = self.GetImage(self.data_objects[r_ds], ir)
+                image1[:,:,0] = r_image.T
+                haveimg1 = True
+            else:
+                r_ds = 1
+                ir = self.red_ch - self.data_objects[0].np
+                r_image = self.GetImage(self.data_objects[r_ds], ir)
+                image2[:, :, 0] = r_image.T
+                haveimg2 = True
+
+            if self.green_ch < self.data_objects[0].np:
+                g_ds = 0
+                ig = self.green_ch
+                g_image = self.GetImage(self.data_objects[g_ds], ig)
+                image1[:, :, 1] = g_image.T
+                haveimg1 = True
+            else:
+                g_ds = 1
+                ig = self.green_ch - self.data_objects[0].np
+                g_image = self.GetImage(self.data_objects[g_ds], ig)
+                image2[:, :, 1] = g_image.T
+                haveimg2 = True
+
+            if self.blue_ch < self.data_objects[0].np:
+                b_ds = 0
+                ib = self.blue_ch
+                b_image = self.GetImage(self.data_objects[b_ds], ib)
+                image1[:, :, 2] = b_image.T
+                haveimg1 = True
+            else:
+                b_ds = 1
+                ib = self.blue_ch - self.data_objects[0].np
+                b_image = self.GetImage(self.data_objects[b_ds], ib)
+                image2[:, :, 2] = b_image.T
+                haveimg2 = True
+
+            if not haveimg1 and haveimg2:
+                image1 = image2
+                image2 = None
+                im1scale = im2scale
+            if not haveimg2:
+                image2 = None
+
+            image1 -= image1.min()
+            image1 *= (im1scale / image1.max())
+            if image2 is not None:
+                image2 -= image2.min()
+                image2 *= (im2scale / image2.max())
+
+        self.CalcScaleBar()
         self.viewer.ShowImage(image1, image2, self.scale_bar_string, self.scale_bar_pixels_x, self.scale_bar_pixels_y,
-                              cmap1=cmap1, cmap2=cmap2
-                              )
+                              cmap1=cmap1, cmap2=cmap2,
+                              show_rgb=self.show_rgb)
         QtWidgets.QApplication.restoreOverrideCursor()
 
 
