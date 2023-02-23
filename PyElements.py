@@ -834,6 +834,10 @@ class ToolBarWidget(QtWidgets.QDockWidget):
         self.cb_scalebar.setChecked(self.parent.show_scale_bar)
         self.cb_scalebar.stateChanged.connect(self.OnShowScalebar)
         vbox1.addWidget(self.cb_scalebar)
+        self.cb_colorbar = QtWidgets.QCheckBox('Show Colorbar', self)
+        self.cb_colorbar.setChecked(self.parent.show_color_bar)
+        self.cb_colorbar.stateChanged.connect(self.OnShowColorbar)
+        vbox1.addWidget(self.cb_colorbar)
 
         sizer3 = QtWidgets.QGroupBox('RGB Map')
         vboxs3 = QtWidgets.QVBoxLayout()
@@ -898,6 +902,13 @@ class ToolBarWidget(QtWidgets.QDockWidget):
             self.parent.show_scale_bar = 1
         else:
             self.parent.show_scale_bar = 0
+        self.parent.ShowImage()
+
+    def OnShowColorbar(self):
+        if self.cb_colorbar.isChecked():
+            self.parent.show_color_bar = 1
+        else:
+            self.parent.show_color_bar = 0
         self.parent.ShowImage()
 
     def OnShowRBG(self):
@@ -1172,9 +1183,10 @@ class ViewerFrame(QtWidgets.QWidget):
         self.setLayout(vboxtop)
 
 
-#-----------------------------------------------------------------------
+    #-----------------------------------------------------------------------
     def ShowImage(self, image1, image2, scale_bar_string, scale_bar_pixels_x, scale_bar_pixels_y,
-                                             cmap1='gray', cmap2='gray', show_rgb=False):
+                  cmap1='gray', cmap2='gray', cblabel1='', cblabel2='',
+                  show_rgb=False):
 
         if image1 is None and image2 is None:
             fig = self.imgfig
@@ -1188,6 +1200,10 @@ class ViewerFrame(QtWidgets.QWidget):
         axes = fig.gca()
         fig.patch.set_alpha(1.0)
 
+        if self.parent.show_color_bar:
+            divider = make_axes_locatable(axes)
+            axes.set_position([0.03,0.03,0.8,0.94])
+
         n_cols = 0
         alpha = 1
         if show_rgb:
@@ -1199,11 +1215,19 @@ class ViewerFrame(QtWidgets.QWidget):
                     n_cols = image2.shape[0]
         else:
             if image1 is not None:
-                im = axes.imshow(image1.T, cmap=matplotlib.cm.get_cmap(cmap1))
+                im1 = axes.imshow(image1.T, cmap=matplotlib.cm.get_cmap(cmap1))
+                if self.parent.show_color_bar:
+                    ax_cb1 = divider.append_axes("right", size="3%", pad="2%")
+                    cbar1 = axes.figure.colorbar(im1, cax=ax_cb1)
                 n_cols = image1.shape[1]
                 alpha = 0.5
             if image2 is not None:
-                im = axes.imshow(image2.T, cmap=matplotlib.cm.get_cmap(cmap2), alpha=alpha)
+                im2 = axes.imshow(image2.T, cmap=matplotlib.cm.get_cmap(cmap2), alpha=alpha)
+                if self.parent.show_color_bar:
+                    ax_cb2 = divider.append_axes("right", size="3%", pad="12%")
+                    cbar2 = axes.figure.colorbar(im2, cax=ax_cb2)
+                    cbar1.set_label(cblabel1)
+                    cbar2.set_label(cblabel2)
                 if n_cols == 0:
                     n_cols = image2.shape[1]
 
@@ -1241,6 +1265,8 @@ class MainFrame(QtWidgets.QMainWindow):
         self.scale_bar_string = ''
         self.scale_bar_pixels_x = 0
         self.scale_bar_pixels_y = 0
+
+        self.show_color_bar = 1
 
         self.show_rgb = False
         self.red_ch = 0
@@ -1413,18 +1439,22 @@ class MainFrame(QtWidgets.QMainWindow):
         image2 = None
         cmap1 = ''
         cmap2 = ''
+        cbl1 = ''
+        cbl2 = ''
         if self.show_rgb is False:
             if self.i_selected_dataset1 >= 0:
                 if len(self.data_objects) > 0:
                     data = self.data_objects[self.i_selected_dataset1]
                     image1 = self.GetImage(data, self.data_channel[self.i_selected_dataset1])
                     cmap1 = self.data_cmap[self.i_selected_dataset1]
+                    cbl1 = self.data_objects[self.i_selected_dataset1].data_type
 
             if len(self.data_objects) > 0:
                 if self.i_selected_dataset2 >= 0:
                     data = self.data_objects[self.i_selected_dataset2]
                     image2 = self.GetImage(data, self.data_channel[self.i_selected_dataset2])
                     cmap2 = self.data_cmap[self.i_selected_dataset2]
+                    cbl2 = self.data_objects[self.i_selected_dataset2].data_type
                     if self.data_transform is not None:
                         h1, w1 = image1.shape[:2]
                         if self.transform == 'affine':
@@ -1500,7 +1530,7 @@ class MainFrame(QtWidgets.QMainWindow):
 
         self.CalcScaleBar()
         self.viewer.ShowImage(image1, image2, self.scale_bar_string, self.scale_bar_pixels_x, self.scale_bar_pixels_y,
-                              cmap1=cmap1, cmap2=cmap2,
+                              cmap1=cmap1, cmap2=cmap2, cblabel1=cbl1, cblabel2=cbl2,
                               show_rgb=self.show_rgb)
         QtWidgets.QApplication.restoreOverrideCursor()
 
