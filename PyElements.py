@@ -123,8 +123,91 @@ def lee_filter(image):
 
     return lf_image
 
-
 class ShowHistogram(QtWidgets.QDialog, QtWidgets.QGraphicsScene):
+    def __init__(self, parent, image_data, data_channel):
+        QtWidgets.QWidget.__init__(self, parent)
+
+        self.parent = parent
+
+        self.resize(1000, 550)
+        self.setWindowTitle('Histogram')
+
+        vboxtop = QtWidgets.QVBoxLayout()
+
+        st = QtWidgets.QLabel('Channel: {0}'.format(data_channel))
+        font = st.font()
+        font.setBold(True)
+        font.setPointSize(10)
+        st.setFont(font)
+        vboxtop.addWidget(st)
+        self.instruction = st
+
+        hboxtop = QtWidgets.QHBoxLayout()
+        frame = QtWidgets.QFrame()
+        frame.setFrameStyle(QtWidgets.QFrame.StyledPanel|QtWidgets.QFrame.Sunken)
+        fbox = QtWidgets.QVBoxLayout()
+        self.rimgfig = Figure()
+        self.rImagePanel = FigureCanvas(self.rimgfig)
+        self.rImagePanel.setParent(self)
+        fbox.addWidget(self.rImagePanel)
+        toolbar = NavigationToolbar(self.rImagePanel, self)
+        fbox.addWidget(toolbar)
+        frame.setLayout(fbox)
+        hboxtop.addWidget(frame, 2)
+
+        vboxtop.addLayout(hboxtop)
+
+        hboxb = QtWidgets.QHBoxLayout()
+        hboxb.addStretch(1)
+
+        button_export = QtWidgets.QPushButton('Export to .csv')
+        button_export.clicked.connect(self.OnExport)
+        hboxb.addWidget(button_export)
+
+        button_cancel = QtWidgets.QPushButton('Close')
+        button_cancel.clicked.connect(self.close)
+        hboxb.addWidget(button_cancel)
+
+        vboxtop.addLayout(hboxb)
+        self.setLayout(vboxtop)
+
+        self.ShowHistogram(image_data, data_channel)
+
+
+    def ShowHistogram(self, image_data, data_channel):
+        fig = self.rimgfig
+        fig.clf()
+        fig.add_axes((0.15, 0.15, 0.75, 0.75))
+        axes = fig.gca()
+
+        histogram = image_data.flatten()
+
+        self.counts, self.bins, patches = axes.hist(histogram, 100)
+        self.counts = self.counts.astype(np.int64)
+
+        # axes.set_ylim(bottom=0)
+        axes.set_xlabel('Counts')
+        axes.set_title(data_channel)
+        axes.set_yscale('log')
+
+        self.rImagePanel.draw()
+
+
+    def OnExport(self):
+        wildcard = "Csv files (*.csv);;"
+        SaveFileName, _filter = QtWidgets.QFileDialog.getSaveFileName(self, 'Save Histogram data', '', wildcard)
+        SaveFileName = str(SaveFileName)
+        if SaveFileName == '':
+            return
+        f = open(str(SaveFileName), 'wt')
+        print('Bin number, Counts, Bins', file=f)
+        for i in range(len(self.counts)):
+            print('{0}, {1}, {2}'.format(i+1, self.counts[i], self.bins[i]), file=f)
+        f.close()
+
+
+
+class ShowHistogramPerChannel(QtWidgets.QDialog, QtWidgets.QGraphicsScene):
     def __init__(self, parent, data):
         QtWidgets.QWidget.__init__(self, parent)
 
@@ -1055,7 +1138,11 @@ class DataViewerWidget(QtWidgets.QDockWidget):
         hbox3.addWidget(self.sl_gamma)
         vbox1.addLayout(hbox3)
 
-        b_histogram = QtWidgets.QPushButton('Show Counts/Channel')
+        b_histogramchannel = QtWidgets.QPushButton('Show Counts/Channel')
+        # b_histogramchannel.setMaximumWidth(220)
+        b_histogramchannel.clicked.connect(self.OnShowHistogramPerChannel)
+        vbox1.addWidget(b_histogramchannel)
+        b_histogram = QtWidgets.QPushButton('Show Histogram')
         # b_histogram.setMaximumWidth(220)
         b_histogram.clicked.connect(self.OnShowHistogram)
         vbox1.addWidget(b_histogram)
@@ -1140,9 +1227,15 @@ class DataViewerWidget(QtWidgets.QDockWidget):
             self.data.despike = 0
         self.parent.ShowImage()
 
+    def OnShowHistogramPerChannel(self):
+        hist_dialog = ShowHistogramPerChannel(self, self.data)
+        hist_dialog.show()
+
     def OnShowHistogram(self):
         data_channel = self.parent.data_channel[self.data_index]
-        hist_dialog = ShowHistogram(self, self.data)
+        data_channel_name = self.data.peaks[data_channel]
+        image_data = self.parent.GetImage(self.data, data_channel)
+        hist_dialog = ShowHistogram(self, image_data, data_channel_name)
         hist_dialog.show()
 
     def closeEvent(self, event):
