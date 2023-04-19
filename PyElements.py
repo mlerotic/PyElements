@@ -567,6 +567,7 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
         else:
             self.parent.data_transform = self.data_transformH
         self.parent.transform = self.transform
+        self.parent.AlignData()
         self.parent.ShowImage()
         self.close()
 
@@ -1319,7 +1320,8 @@ class ViewerFrame(QtWidgets.QWidget):
                 if self.parent.show_color_bar:
                     ax_cb2 = divider.append_axes("right", size="3%", pad="12%")
                     cbar2 = axes.figure.colorbar(im2, cax=ax_cb2)
-                    cbar1.set_label(cblabel1)
+                    if image1 is not None:
+                        cbar1.set_label(cblabel1)
                     cbar2.set_label(cblabel2)
                 if n_cols == 0:
                     n_cols = image2.shape[1]
@@ -1548,13 +1550,13 @@ class MainFrame(QtWidgets.QMainWindow):
                     image2 = self.GetImage(data, self.data_channel[self.i_selected_dataset2])
                     cmap2 = self.data_cmap[self.i_selected_dataset2]
                     cbl2 = self.data_objects[self.i_selected_dataset2].data_type
-                    if self.data_transform is not None:
-                        h1, w1 = image1.shape[:2]
-                        if self.transform == 'affine':
-                            image2 = cv2.warpAffine(image2, self.data_transform, (w1, h1))
-                        else:
-                            image2 = cv2.warpPerspective(image2, self.data_transform, (w1, h1),
-                                                            flags=cv2.INTER_LINEAR)
+                    # if self.data_transform is not None:
+                    #     h1, w1 = image1.shape[:2]
+                    #     if self.transform == 'affine':
+                    #         image2 = cv2.warpAffine(image2, self.data_transform, (w1, h1))
+                    #     else:
+                    #         image2 = cv2.warpPerspective(image2, self.data_transform, (w1, h1),
+                    #                                         flags=cv2.INTER_LINEAR)
         else:
             image1 = np.zeros((self.data_objects[0].ny, self.data_objects[0].nx, 3),
                               dtype=self.data_objects[0].image_data.dtype)
@@ -1618,6 +1620,13 @@ class MainFrame(QtWidgets.QMainWindow):
             image1 -= image1.min()
             image1 *= (im1scale / image1.max())
             if image2 is not None:
+                if self.data_transform is not None:
+                    h1, w1 = image1.shape[:2]
+                    if self.transform == 'affine':
+                        image2 = cv2.warpAffine(image2, self.data_transform, (w1, h1))
+                    else:
+                        image2 = cv2.warpPerspective(image2, self.data_transform, (w1, h1),
+                                                     flags=cv2.INTER_LINEAR)
                 image2 -= image2.min()
                 image2 *= (im2scale / image2.max())
 
@@ -1678,6 +1687,26 @@ class MainFrame(QtWidgets.QMainWindow):
                 image2 = self.GetImage(data, self.data_channel[self.i_selected_dataset2])
         imgregwin = ImageRegistrationDialog(self, image1, image2)
         imgregwin.show()
+
+    def AlignData(self):
+        if self.data_transform is not None:
+            data1 = self.data_objects[0]
+            data2 = self.data_objects[1]
+
+            h1 = data1.nx
+            w1 = data1.ny
+            aligned_data = []
+            for i in range(data2.np):
+                image2 = data2.image_data[i, :, :]
+                if self.transform == 'affine':
+                    image2 = cv2.warpAffine(image2, self.data_transform, (w1, h1))
+                else:
+                    image2 = cv2.warpPerspective(image2, self.data_transform, (w1, h1),
+                                                 flags=cv2.INTER_LINEAR)
+                aligned_data.append(image2)
+            self.data_objects[1].image_data = np.array(aligned_data)
+            self.data_objects[1].nx = data1.nx
+            self.data_objects[1].ny = data1.ny
 
 
 
