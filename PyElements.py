@@ -19,10 +19,11 @@ import matplotlib.pyplot as plt
 import cv2
 import numpy as np
 import scipy as sp
-from scipy.ndimage import median_filter, uniform_filter
+from scipy.ndimage import median_filter, uniform_filter, filters, interpolation
 import file_plugins
 import data_store
 from QRangeSlider import QRangeSlider
+import skimage as ski
 
 
 Winsizex = 1000
@@ -341,18 +342,20 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
         self.lpoints = []
         self.rpoints = []
         self.transform = 'homography'
-        self.n_segments = 4
+        self.n_segments = 36
         self.data_transformH = None
         self.data_transform_fine = None
 
-        self.resize(1050, 750)
+        self.resize(1350, 750)
         self.setWindowTitle('Image Alignment')
+        self.setWindowFlag(Qt.WindowMinimizeButtonHint, True)
+        self.setWindowFlag(Qt.WindowMaximizeButtonHint, True)
 
         vboxtop = QtWidgets.QVBoxLayout()
         hboxtop = QtWidgets.QHBoxLayout()
-        sizer1 = QtWidgets.QGroupBox('Manual Alignment')
+        sizer1 = QtWidgets.QGroupBox('Manual Point Selection')
         vbox1 = QtWidgets.QVBoxLayout()
-        st = QtWidgets.QLabel('1 - Select points on the images\n2 - Calculate Homography')
+        st = QtWidgets.QLabel('1 - Select points on the images\n2 - Improve point locations with cross-correlation\n3 - Calculate')
         # self.rb_affine = QtWidgets.QRadioButton('Affine', self)
         # self.rb_hom = QtWidgets.QRadioButton('Homography',self)
         # self.rb_affine.setChecked(True)
@@ -360,18 +363,23 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
         vbox1.addWidget(st)
         # vbox1.addWidget(self.rb_affine)
         # vbox1.addWidget(self.rb_hom)
-        button_calc_homography = QtWidgets.QPushButton('Calculate Homography')
+        self.b_ccr_alignment = QtWidgets.QPushButton('Improve point locations')
+        self.b_ccr_alignment.setMaximumWidth(220)
+        self.b_ccr_alignment.clicked.connect(self.OnSegmentAlignmentCC)
+        # self.b_ccr_alignment.setEnabled(False)
+        vbox1.addWidget(self.b_ccr_alignment)
+        button_calc_homography = QtWidgets.QPushButton('Calculate')
         button_calc_homography.setMaximumWidth(220)
         button_calc_homography.clicked.connect(self.OnCalculateHomography)
         vbox1.addWidget(button_calc_homography)
         sizer1.setLayout(vbox1)
         hboxtop.addWidget(sizer1, 1)
-        sizer2 = QtWidgets.QGroupBox('Fine Automatic alignment')
+        sizer2 = QtWidgets.QGroupBox('Automatic point location refinement')
         vbox2 = QtWidgets.QVBoxLayout()
-        st = QtWidgets.QLabel('Segmented cross-correlation method:')
+        st = QtWidgets.QLabel('Improve point location using segments:')
         vbox2.addWidget(st)
         hbox2 = QtWidgets.QHBoxLayout()
-        hbox2.addWidget(QtWidgets.QLabel('NxN segments:  '))
+        hbox2.addWidget(QtWidgets.QLabel('Segments size N:  '))
         self.le_nsegments = QtWidgets.QLineEdit()
         self.le_nsegments.setText('{0}'.format(self.n_segments))
         self.le_nsegments.setMaximumWidth(150)
@@ -380,11 +388,11 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
         hbox2.addWidget(self.le_nsegments)
         hbox2.addStretch(1)
         vbox2.addLayout(hbox2)
-        self.b_ccr_alignment = QtWidgets.QPushButton('Calculate Fine')
-        self.b_ccr_alignment.setMaximumWidth(220)
-        self.b_ccr_alignment.clicked.connect(self.OnCalculateCC)
-        self.b_ccr_alignment.setEnabled(False)
-        vbox2.addWidget(self.b_ccr_alignment)
+        self.b_show_segments = QtWidgets.QPushButton('Show Segments')
+        self.b_show_segments.setMaximumWidth(220)
+        self.b_show_segments.clicked.connect(self.OnShowSegments)
+        # self.b_show_segments.setEnabled(False)
+        vbox2.addWidget(self.b_show_segments)
         sizer2.setLayout(vbox2)
         hboxtop.addWidget(sizer2, 1)
         vboxtop.addLayout(hboxtop)
@@ -462,6 +470,9 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
 
         if image1 is None or image2 is None:
             return
+
+        np.save('image1.bin', image1)
+        np.save('image2.bin', image2)
 
         fig = self.limgfig
         fig.clf()
@@ -554,6 +565,7 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
             al_image2 = cv2.warpPerspective(self.image2, H, (w1, h1),
                                               flags=cv2.INTER_LINEAR)
         self.b_ccr_alignment.setEnabled(True)
+        self.b_show_segments.setEnabled(True)
         self.b_save.setEnabled(True)
 
         self.data_transformH = H
@@ -584,56 +596,240 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
 
         self.OnClear()
 
-    def OnCalculateCC(self):
-        if self.aligned_image is None:
+    def ShowSegsImg(self, axis, ptsi):
+        n_segments = int(self.le_nsegments.text())
+        n2 = int(self.n_segments/2)
+        pts1 = np.float32(ptsi)
+        for i in range(len(pts1)):
+            rect = matplotlib.patches.Rectangle((pts1[i][1] - n2, pts1[i][0] - n2), n_segments, n_segments,
+                                                linewidth=1, edgecolor='r', facecolor='none')
+            axis.add_patch(rect)
+            axis.plot(pts1[i][1], pts1[i][0], '.')
+
+    def OnShowSegments(self):
+        npts = 5
+        if len(self.lpoints) < npts or len(self.rpoints) < npts:
+            QtWidgets.QMessageBox.warning(self, 'Warning', "Please select {0} points on the left "
+                                                           "and the right image.".format(npts))
             return
+
+        self.ShowImage(self.image1, self.image2)
         self.n_segments = int(self.le_nsegments.text())
-        iw, ih = self.aligned_image.shape
-        tw, th = int(iw / self.n_segments), int(ih / self.n_segments)
-        plt.figure()
-        plt.imshow(self.aligned_image.T, 'gray', interpolation='none')
-        for i in range(1, self.n_segments):
-            plt.plot([0, iw], [i * th, i * th], 'red')
-            plt.plot([i * tw, i * tw], [0, ih], 'red')
-        plt.show()
+        n2 = int(self.n_segments/2)
+        pts1 = np.float32(self.lpoints)
+        pts2 = np.float32(self.rpoints)
+        self.ShowSegsImg(self.laxes, pts1)
+        self.lImagePanel.draw()
+        self.ShowSegsImg(self.raxes, pts2)
+        self.rImagePanel.draw()
 
-        points1 = []
-        points2 = []
+    def registration_phaseCrossCorrelation(self, ref_img, mov_img):
+        tvec = ski.registration.phase_cross_correlation(ref_img, mov_img, upsample_factor=4)[0]
+        M = np.array([
+            [1, 0, tvec[0]],
+            [0, 1, tvec[1]]]
+        )
+        w1, h1 = mov_img.shape
+        reg_img = cv2.warpAffine(mov_img, M, (h1, w1))
+        return reg_img, tvec
 
-        method = eval('cv2.TM_CCORR_NORMED')
+    def OnSegmentAlignmentCC(self):
+        self.t_status.append('Improved point locations')
+        self.n_segments = int(self.le_nsegments.text())
+        n2 = int(self.n_segments/2)
+        pts1 = self.lpoints
+        pts2 = self.rpoints
+        pts_pcc = []
+        pts_aligned = []
+        for i in range(len(pts1)):
+            template1 = self.image1[pts1[i][1] - n2:pts1[i][1] + n2, pts1[i][0] - n2:pts1[i][0] + n2]
+            template2 = self.image2[pts2[i][1] - n2:pts2[i][1] + n2, pts2[i][0] - n2:pts2[i][0] + n2]
+            reg_im, tvec = self.registration_phaseCrossCorrelation(template1, template2)
+            pts_pcc.append([tvec[0], tvec[1]])
+            pts_aligned.append([pts2[i][0] - pts_pcc[i][1], pts2[i][1] - pts_pcc[i][0]])
+            self.t_status.append('Point {0} shift {1}, {2} [{3}, {4}] -> [{5}, {6}]'.format(i, tvec[0], tvec[1],
+                                                                                            pts2[i][0], pts2[i][1],
+                                                                                            pts_aligned[i][0], pts_aligned[i][1]))
+            # fig, axs = plt.subplots(1, 3, figsize=(12, 4))
+            # ax = axs[0]
+            # ax.imshow(template1.T, cmap='gray')
+            # ax.set_title("Reference Image")
+            # ax = axs[1]
+            # ax.imshow(template1.T.astype(float) - reg_im.T, cmap='bwr')
+            # ax.set_title("diff")
+            # ax = axs[2]
+            # ax.imshow(reg_im.T, cmap='gray')
+            # ax.set_title("Registered Image")
+            # plt.show()
+            # pts_al.append(registration_shift_segm(template1, template2))
+        self.rpoints = pts_aligned[:]
+        self.ShowSegsImg(self.raxes, pts_aligned)
+        self.ShowSegsImg(self.laxes, pts_aligned)
+        self.rImagePanel.draw()
+        self.lImagePanel.draw()
+        # self.OnShowSegments()
+
+    def OnCalculateSIFT(self):
+        npts = 5
+        if len(self.lpoints) < npts or len(self.rpoints) < npts:
+            QtWidgets.QMessageBox.warning(self, 'Warning', "Please select {0} points on the left "
+                                                           "and the right image.".format(npts))
+            return
+
+        import pickle
+        with open('points.pickle', 'wb') as handle:
+            pickle.dump([self.lpoints, self.rpoints], handle, protocol=pickle.HIGHEST_PROTOCOL)
+
+        self.n_segments = int(self.le_nsegments.text())
+        n2 = int(self.n_segments/2)
+        pts1 = self.lpoints
+        pts2 = self.rpoints
+
         for i in range(0, self.n_segments):
-            for j in range(0, self.n_segments):
+            template1 = self.image1[pts1[i][0]-n2:pts1[i][0]+n2, pts1[i][1]-n2:pts1[i][1]+n2]
+            template2 = self.image2[pts2[i][0] - n2:pts2[i][0] + n2, pts2[i][1] - n2:pts2[i][1] + n2]
+            xshift, yshift, fr = self.registration_shift(template1, template2)
 
-                template1 = self.image1[i * tw:(i + 1) * tw, j * th:(j + 1) * th]
-                img = template1.copy() / np.amax(template1)
-                template2 = self.aligned_image[i * tw+5:(i + 1) * tw-5, j * th+5:(j + 1) * th-5]
-                # print('shapes', template1.shape[::-1], template2.shape[::-1])
-                w, h = template2.shape[::-1]
-
-                # Apply template Matching
-                res = cv2.matchTemplate(template1.astype(np.float32), template2.astype(np.float32), method)
-                min_val, max_val, min_loc, max_loc = cv2.minMaxLoc(res)
-                # print('correlation', max_val)
-                top_left = max_loc
-                top_left_true = [max_loc[0], max_loc[1]]
-                points1.append((i * tw, j * th))
-                points2.append((i * tw + top_left[1], j * th + top_left[0]))
-
-        pts1 = np.float32(points1)
-        pts2 = np.float32(points2)
-        h1, w1 = self.image1.shape[:2]
-        h2, w2 = self.aligned_image.shape[:2]
-
-        H, status = cv2.findHomography(pts1, pts2)
-        al_image2 = cv2.warpPerspective(self.aligned_image, H, (w1, h1), flags=cv2.INTER_LINEAR)
-
-        self.data_transform_fine = np.matmul(H, self.data_transformH)
-        self.ShowImage(self.image1, al_image2)
+        # pts1 = np.float32(points1)
+        # pts2 = np.float32(points2)
+        # h1, w1 = self.image1.shape[:2]
+        # h2, w2 = self.aligned_image.shape[:2]
+        #
+        # H, status = cv2.findHomography(pts1, pts2)
+        # al_image2 = cv2.warpPerspective(self.aligned_image, H, (w1, h1), flags=cv2.INTER_LINEAR)
+        #
+        # self.data_transform_fine = np.matmul(H, self.data_transformH)
+        # self.ShowImage(self.image1, al_image2)
 
         # test_im = cv2.warpPerspective(self.image2, combined_transform, (w1, h1), flags=cv2.INTER_LINEAR)
         # plt.figure()
         # plt.imshow(test_im.T, 'gray', interpolation='none')
         # plt.show()
+
+    def registration_shift(self, ref_im, mov_im):
+        mapper = cv2.reg.MapperGradShift()
+        mapper_pyramid = cv2.reg.MapperPyramid(mapper)
+        # Notice that you can adjust these parameters to fit your usecase
+        mapper_pyramid.numLev_ = 5
+        mapper_pyramid.numIterPerScale_ = 25
+        M = mapper_pyramid.calculate(ref_im / np.max(ref_im),
+                                     mov_im / np.max(mov_im))  # Notice that it fails if the images are not normalized to [0, 1)
+        map_shift = cv2.reg.MapTypeCaster_toShift(M.inverseMap())
+        tvec = map_shift.getShift()
+        return tvec
+
+    # ----------------------------------------------------------------------
+    # Register images using Fourier Shift Theorem
+    # EdgeEnhancement: 0 = no edge enhacement; 1 = sobel; 2 = prewitt
+    def calc_fouriershifts(self, ref_image, image2, have_ref_img_fft=False, edge_enhancement=0):
+
+        if have_ref_img_fft == False:
+            if edge_enhancement == 1:
+                self.ref_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(filters.sobel(ref_image))))
+            elif edge_enhancement == 2:
+                self.ref_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(filters.prewitt(ref_image))))
+            else:
+                self.ref_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(ref_image)))
+
+        if edge_enhancement == 1:
+            img2_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(filters.sobel(image2))))
+        if edge_enhancement == 2:
+            img2_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(filters.prewitt(image2))))
+        else:
+            img2_fft = np.fft.fftshift(np.fft.fft2(np.fft.fftshift(image2)))
+
+        fr = (self.ref_fft * img2_fft.conjugate()) / (np.abs(self.ref_fft) * np.abs(img2_fft))
+        fr = np.fft.fftshift(np.fft.ifft2(np.fft.fftshift(fr)))
+        fr = np.abs(fr)
+
+        shape = ref_image.shape
+
+        xc, yc = np.unravel_index(np.argmax(fr), shape)
+
+        # Limit the search to 1 pixel border
+        if xc == 0:
+            xc = 1
+        if xc == shape[0] - 1:
+            xc = shape[0] - 2
+
+        if yc == 0:
+            yc = 1
+        if yc == shape[1] - 1:
+            yc = shape[1] - 2
+
+        # Use peak fit to find the shifts
+        xpts = [xc - 1, xc, xc + 1]
+        ypts = fr[xpts, yc]
+        xf, fit = self.peak_fit(xpts, ypts)
+
+        xpts = [yc - 1, yc, yc + 1]
+        ypts = fr[xc, xpts]
+        yf, fit = self.peak_fit(xpts, ypts)
+
+        xshift = xf - float(shape[0]) / 2.0
+        yshift = yf - float(shape[1]) / 2.0
+
+        return xshift, yshift, fr
+
+    # ----------------------------------------------------------------------
+    # Quadratic peak fit: Fits the 3 data pairs to y=a+bx+cx^2, returning fit=[a,b,c]'
+    #  and xpeak at position of inflection'
+    def peak_fit(self, x, y):
+
+        y1y0 = y[1] - y[0]
+        y2y0 = y[2] - y[0]
+        x1x0 = float(x[1] - x[0])
+        x2x0 = float(x[2] - x[0])
+        x1x0sq = float(x[1] * x[1] - x[0] * x[0])
+        x2x0sq = float(x[2] * x[2] - x[0] * x[0])
+
+        c_num = y2y0 * x1x0 - y1y0 * x2x0
+        c_denom = x2x0sq * x1x0 - x1x0sq * x2x0
+
+        if c_denom == 0:
+            print('Divide by zero error')
+            return
+
+        c = c_num / float(c_denom)
+        if x1x0 == 0:
+            print('Divide by zero error')
+            return
+
+        b = (y1y0 - c * x1x0sq) / float(x1x0)
+        a = y[0] - b * x[0] - c * x[0] * x[0]
+
+        fit = [a, b, c]
+        if c == 0:
+            xpeak = 0.
+            print('Cannot find xpeak')
+            return
+        else:
+            # Constrain the fit to be within these three points.
+            xpeak = -b / (2.0 * c)
+            if xpeak < x[0]:
+                xpeak = float(x[0])
+            if xpeak > x[2]:
+                xpeak = float(x[2])
+
+        return xpeak, fit
+
+
+    # ----------------------------------------------------------------------
+    # Apply image registration
+    def apply_image_registration(self, image, xshift, yshift):
+
+        shape = image.shape
+        nx = shape[0]
+        ny = shape[1]
+
+        outofboundariesval = np.sum(image) / float(nx * ny)
+        shifted_img = interpolation.shift(image, [xshift, yshift],
+                                                        mode='constant',
+                                                        cval=outofboundariesval)
+
+        return shifted_img
+
+
 
 
 
