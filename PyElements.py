@@ -573,6 +573,16 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
         self.aligned_image = al_image2
         QtWidgets.QApplication.restoreOverrideCursor()
 
+        rgb_img = np.zeros((w1, h1, 3), dtype='uint8')
+        rgb_img[:, :, 0] = ((self.image1.T - self.image1.min()) * (1 / (self.image1.max() - self.image1.min()) * 255)).astype('uint8')
+        rgb_img[:, :, 1] = (
+                    (self.aligned_image.T - self.aligned_image.min()) * (1 / (self.aligned_image.max() - self.aligned_image.min()) * 255)).astype(
+            'uint8')
+
+        plt.figure()
+        plt.imshow(rgb_img, interpolation='none')
+        plt.show()
+
     def OnSave(self):
         if self.data_transform_fine is not None:
             self.parent.data_transform = self.data_transform_fine
@@ -661,7 +671,6 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
             # ax.imshow(reg_im.T, cmap='gray')
             # ax.set_title("Registered Image")
             # plt.show()
-            # pts_al.append(registration_shift_segm(template1, template2))
         self.rpoints = pts_aligned[:]
         self.ShowSegsImg(self.raxes, pts_aligned)
         self.ShowSegsImg(self.laxes, pts_aligned)
