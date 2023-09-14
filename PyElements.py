@@ -24,6 +24,7 @@ import file_plugins
 import data_store
 from QRangeSlider import QRangeSlider
 import skimage as ski
+import h5py
 
 
 Winsizex = 1000
@@ -470,9 +471,6 @@ class ImageRegistrationDialog(QtWidgets.QDialog):
 
         if image1 is None or image2 is None:
             return
-
-        np.save('image1.bin', image1)
-        np.save('image2.bin', image2)
 
         fig = self.limgfig
         fig.clf()
@@ -1087,7 +1085,7 @@ class ToolBarWidget(QtWidgets.QDockWidget):
                                    border: black solid 1px
                                    }""")
 
-        self.setFixedSize(200, 430)
+        self.setFixedSize(200, 480)
         self.setWindowTitle('Toolbar')
 
         frame = QtWidgets.QFrame()
@@ -1612,17 +1610,23 @@ class MainFrame(QtWidgets.QMainWindow):
         self.maintoolbar = self.addToolBar('MainToolbar')
         self.maintoolbar.setStyleSheet('QToolBar{spacing:3px;}')
 
-        self.actionBrowser = QtWidgets.QAction(self)
-        self.actionBrowser.setIcon(QtGui.QIcon(os.path.join('resources','openfolder.png')))
-        self.actionBrowser.setToolTip('Load Data')
-        self.maintoolbar.addAction(self.actionBrowser)
-        self.actionBrowser.triggered.connect(self.OnLoadStack)
+        actionBrowser = QtWidgets.QAction(self)
+        actionBrowser.setIcon(QtGui.QIcon(os.path.join('resources','openfolder.png')))
+        actionBrowser.setToolTip('Load Data')
+        self.maintoolbar.addAction(actionBrowser)
+        actionBrowser.triggered.connect(self.OnLoadStack)
 
-        self.actionToolbar = QtWidgets.QAction(self)
-        self.actionToolbar.setIcon(QtGui.QIcon(os.path.join('resources','settings.png')))
-        self.actionToolbar.setToolTip('Toolbar')
-        self.maintoolbar.addAction(self.actionToolbar)
-        self.actionToolbar.triggered.connect(self.OnToolbarTB)
+        actionSave = QtWidgets.QAction(self)
+        actionSave.setIcon(QtGui.QIcon(os.path.join('resources','floppy-disk.png')))
+        actionSave.setToolTip('Save processed data')
+        self.maintoolbar.addAction(actionSave)
+        actionSave.triggered.connect(self.OnSaveData)
+
+        # self.actionToolbar = QtWidgets.QAction(self)
+        # self.actionToolbar.setIcon(QtGui.QIcon(os.path.join('resources','settings.png')))
+        # self.actionToolbar.setToolTip('Toolbar')
+        # self.maintoolbar.addAction(self.actionToolbar)
+        # self.actionToolbar.triggered.connect(self.OnToolbarTB)
 
         # spacer = QtWidgets.QWidget()
         # spacer.setSizePolicy(QtWidgets.QSizePolicy.Expanding, QtWidgets.QSizePolicy.Expanding)
@@ -1687,6 +1691,35 @@ class MainFrame(QtWidgets.QMainWindow):
             self.ShowImage()
 
             QtWidgets.QApplication.restoreOverrideCursor()
+
+    def OnSaveData(self):
+        if len(self.data_objects) == 0:
+            return
+        h5filename = QtWidgets.QFileDialog.getSaveFileName(self, "Select HDF5 data file", '', "HDF5 Files(*.h5)",
+                                                               None, QtWidgets.QFileDialog.DontUseNativeDialog)[0]
+        if len(h5filename) == 0:
+            return
+        if not h5filename.endswith('.h5'):
+            h5filename += '.h5'
+        with h5py.File(h5filename, 'w') as f:
+            f.attrs['version'] = '1.0.0'
+            f.attrs['PyElements'] = 1
+            f.attrs['NDatasets'] = len(self.data_objects)
+            for i in range(len(self.data_objects)):
+                ds = f.create_group('DataSet{0}'.format(i))
+                ds.attrs['data_type'] = self.data_objects[i].data_type
+                ds.attrs['filename'] = self.data_objects[i].filename
+                ds.attrs['motor_units'] = self.data_objects[i].motor_units
+                dset1 = ds.create_dataset("image_data", data=self.data_objects[i].image_data)
+                dset1.attrs['nx'] = self.data_objects[i].nx
+                dset1.attrs['ny'] = self.data_objects[i].ny
+                dset2 = ds.create_dataset("peaks", data=self.data_objects[i].peaks)
+                dset2.attrs['np'] = self.data_objects[i].np
+                dset3 = ds.create_dataset("x_coord", data=self.data_objects[i].x_coord)
+                dset4 = ds.create_dataset("y_coord", data=self.data_objects[i].y_coord)
+                dset3.attrs['dx'] = self.data_objects[i].dx
+                dset4.attrs['dy'] = self.data_objects[i].dy
+        QtWidgets.QMessageBox.information(self, 'Info', "Data saved to {0}".format(h5filename))
 
 
     def UpdateChannelList(self, data_type, data):
@@ -1825,13 +1858,13 @@ class MainFrame(QtWidgets.QMainWindow):
             image1 -= image1.min()
             image1 *= (im1scale / image1.max())
             if image2 is not None:
-                if self.data_transform is not None:
-                    h1, w1 = image1.shape[:2]
-                    if self.transform == 'affine':
-                        image2 = cv2.warpAffine(image2, self.data_transform, (w1, h1))
-                    else:
-                        image2 = cv2.warpPerspective(image2, self.data_transform, (w1, h1),
-                                                     flags=cv2.INTER_LINEAR)
+                # if self.data_transform is not None:
+                #     h1, w1 = image1.shape[:2]
+                #     if self.transform == 'affine':
+                #         image2 = cv2.warpAffine(image2, self.data_transform, (w1, h1))
+                #     else:
+                #         image2 = cv2.warpPerspective(image2, self.data_transform, (w1, h1),
+                #                                      flags=cv2.INTER_LINEAR)
                 image2 -= image2.min()
                 image2 *= (im2scale / image2.max())
 
@@ -1983,7 +2016,8 @@ def main():
     app.setAttribute(QtCore.Qt.AA_UseHighDpiPixmaps)
 
     #app = QtWidgets.QApplication(sys.argv)
-    app.setStyle(QtWidgets.QStyleFactory.create('cleanlooks'))
+    # app.setStyle(QtWidgets.QStyleFactory.create('cleanlooks'))
+    app.setStyle('Fusion')
     frame = MainFrame()
     sys.exit(app.exec_())
 
