@@ -66,7 +66,7 @@ filter_list = ['Supported Formats ('+' '.join(supported_filters)+')']+filter_lis
 filter_list.append('All files (*.*)')
 
 
-def load(filename, datastore_object=None, plugin=None):
+def load(filename, data_store, datastore_object=None, plugin=None):
     """
     Pass the load command over to the appropriate plugin so that it can import data from the named file.
     selection defines a list of tuples as [(region, channel),(region+1,channel),...]
@@ -77,7 +77,7 @@ def load(filename, datastore_object=None, plugin=None):
         return None
     else:
         print("load", filename, "with the", plugin.title, "plugin.")
-        plugin.read(filename, datastore_object)
+        plugin.read(filename, data_store, datastore_object)
 
 
 def identify(filename):

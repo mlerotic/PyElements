@@ -17,10 +17,9 @@ def identify(filename):
         return False
 
 
-def read(FileName, ds_object):
-
+def read(FileName, data_store, ds_object_list):
     print('Reading file {0} ...'.format(FileName), end=' ')
-
+    ds_object = data_store.DataStore()
     ds_object.filename = FileName
     ds_object.data_type = type[0]
 
@@ -44,6 +43,7 @@ def read(FileName, ds_object):
     ds_object.dy = np.round(abs(ds_object.y_coord[1][-1]-ds_object.y_coord[1][0])/(ds_object.ny-1), 5)
     # print(ds_object.dx, ds_object.dy)
     # print(ds_object.motor_units)
+    ds_object_list.append(ds_object)
 
     print('done')
 

@@ -1649,7 +1649,6 @@ class MainFrame(QtWidgets.QMainWindow):
         """
         Browse for a data file:
         """
-
         filepath, plugin = File_GUI.SelectFile()
         if filepath is not None:
             if plugin is None:  # auto-assign appropriate plugin
@@ -1660,26 +1659,26 @@ class MainFrame(QtWidgets.QMainWindow):
 
             QtWidgets.QApplication.setOverrideCursor(QtGui.QCursor(Qt.WaitCursor))
 
-            data = data_store.DataStore()
+            have_data = len(self.data_objects)
+            file_plugins.load(filepath, data_store, datastore_object=self.data_objects, plugin=plugin)
 
-            file_plugins.load(filepath, datastore_object=data, plugin=plugin)
-            self.data_objects.append(data)
+            for i in range(have_data, len(self.data_objects)):
+                data = self.data_objects[i]
+                if data.data_type == 'XFM':
+                    self.data_channel.append(len(data.peaks) - 2)
+                else:
+                    self.data_channel.append(78)
 
-            if data.data_type == 'XFM':
-                self.data_channel.append(len(data.peaks) - 2)
-            else:
-                self.data_channel.append(78)
+                self.data_names.append(data.data_type)
+                self.data_cmap.append('gray')
 
-            self.data_names.append(data.data_type)
-            self.data_cmap.append('gray')
+                datawin = DataViewerWidget(self, data, i)
+                self.addDockWidget(Qt.TopDockWidgetArea, datawin)
 
-            datawin = DataViewerWidget(self, data, len(self.data_objects) - 1)
-            self.addDockWidget(Qt.TopDockWidgetArea, datawin)
-
-            self.tb_widget.AddData(data.data_type)
-            self.UpdateChannelList(data.data_type, data)
-            self.tb_widget.AddRBGChannels(self.channel_list)
-            self.data_widgets.append(datawin)
+                self.tb_widget.AddData(data.data_type)
+                self.UpdateChannelList(data.data_type, data)
+                self.tb_widget.AddRBGChannels(self.channel_list)
+                self.data_widgets.append(datawin)
 
             if len(self.data_objects) == 1:
                 self.i_selected_dataset1 = 0
@@ -1689,7 +1688,6 @@ class MainFrame(QtWidgets.QMainWindow):
                 self.i_selected_dataset2 = len(self.data_objects) - 1
 
             self.ShowImage()
-
             QtWidgets.QApplication.restoreOverrideCursor()
 
     def OnSaveData(self):
